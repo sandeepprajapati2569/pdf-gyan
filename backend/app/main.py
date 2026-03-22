@@ -43,3 +43,19 @@ app.include_router(public_api.router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/api/health/db")
+async def health_db():
+    """Diagnostic endpoint to check DB connectivity."""
+    from app.database import get_db, client
+    import traceback
+    try:
+        db = get_db()
+        if db is None:
+            return {"status": "error", "detail": "db is None"}
+        # Ping the database
+        result = await client.admin.command("ping")
+        return {"status": "ok", "ping": result}
+    except Exception as e:
+        return {"status": "error", "detail": str(e), "type": type(e).__name__, "trace": traceback.format_exc()}
