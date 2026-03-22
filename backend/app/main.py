@@ -1,7 +1,13 @@
+import logging
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 from app.database import connect_db, close_db
 from app.services.private_db_service import close_all_private_clients
 from app.routers import auth, documents, chat, settings as settings_router, api_keys, public_api
@@ -30,6 +36,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler to surface errors
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}\n{tb}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
+
 
 # Routers
 app.include_router(auth.router)
