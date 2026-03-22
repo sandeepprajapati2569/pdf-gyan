@@ -1,0 +1,45 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
+from app.database import connect_db, close_db
+from app.services.private_db_service import close_all_private_clients
+from app.routers import auth, documents, chat, settings as settings_router, api_keys, public_api
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await connect_db()
+    yield
+    await close_all_private_clients()
+    await close_db()
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="Chat with your PDF documents using AI",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routers
+app.include_router(auth.router)
+app.include_router(documents.router)
+app.include_router(chat.router)
+app.include_router(settings_router.router)
+app.include_router(api_keys.router)
+app.include_router(public_api.router)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "app": settings.APP_NAME}
