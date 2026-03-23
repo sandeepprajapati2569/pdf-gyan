@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import smtplib
 from email.mime.text import MIMEText
@@ -91,11 +92,14 @@ This link expires in 15 minutes. If you didn't request this, you can safely igno
     msg.attach(MIMEText(text_content, "plain"))
     msg.attach(MIMEText(html_content, "html"))
 
-    try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+    def _send():
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
             server.starttls()
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
+
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, _send)
         logger.info(f"Reset email sent to {to_email}")
     except Exception as e:
         logger.error(f"Failed to send reset email to {to_email}: {e}")
