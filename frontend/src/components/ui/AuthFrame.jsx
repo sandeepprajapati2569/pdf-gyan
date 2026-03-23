@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, ChartSpline, ShieldCheck, Workflow } from 'lucide-react'
-import BrandMark from './BrandMark'
 
 const highlights = [
   {
@@ -36,15 +35,7 @@ export default function AuthFrame({
           <div className="absolute right-[-5rem] top-[-4rem] h-56 w-56 rounded-full bg-teal-300/20 blur-3xl" />
           <div className="absolute bottom-[-6rem] left-[-2rem] h-64 w-64 rounded-full bg-amber-200/30 blur-3xl" />
 
-          <div className="relative space-y-8">
-            <div className="inline-flex items-center gap-3 rounded-full border border-white/60 bg-white/72 px-4 py-2 text-sm font-medium text-slate-700 shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-              <BrandMark className="h-10 w-10 shrink-0" />
-              <div>
-                <p className="font-display text-base text-slate-950">PDF Gyan</p>
-                <p className="text-xs text-slate-500">Document intelligence for serious workflows</p>
-              </div>
-            </div>
-
+          <div className="relative space-y-6">
             <div className="space-y-4">
               <span className="eyebrow">Focused workspace</span>
               <h1 className="font-display text-4xl leading-tight text-slate-950 xl:text-5xl">

@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     APP_NAME: str = "PDF Gyan"
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # SMTP / Email
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@pdfgyan.com"
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # Password Reset
+    RESET_TOKEN_EXPIRE_MINUTES: int = 15
+
     # Upload
     MAX_FILE_SIZE_MB: int = 50
     UPLOAD_DIR: str = "uploads"

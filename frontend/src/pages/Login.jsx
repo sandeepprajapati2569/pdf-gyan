@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowRight, Loader2, Mail, LockKeyhole } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { login } from '../api/auth'
 import AuthFrame from '../components/ui/AuthFrame'
@@ -55,7 +55,15 @@ export default function Login() {
         </div>
 
         <div>
-          <label className="field-label">Password</label>
+          <div className="flex items-center justify-between">
+            <label className="field-label">Password</label>
+            <Link
+              to="/forgot-password"
+              className="text-xs font-medium text-teal-700 hover:text-teal-800 transition"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <LockKeyhole className="auth-field-icon pointer-events-none absolute z-10 text-slate-400" />
             <input

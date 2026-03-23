@@ -1,9 +1,19 @@
+import logging
 from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime, timezone
 from app.database import get_db
-from app.models.user import UserRegister, UserLogin, UserResponse, TokenResponse
-from app.services.auth_service import hash_password, verify_password, create_access_token
+from app.models.user import (
+    UserRegister, UserLogin, UserResponse, TokenResponse,
+    ForgotPasswordRequest, ResetPasswordRequest,
+)
+from app.services.auth_service import (
+    hash_password, verify_password, create_access_token,
+    create_reset_token, verify_reset_token,
+)
+from app.services.email_service import send_reset_email
 from app.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -90,3 +100,60 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         has_private_mongodb=bool(current_user.get("private_mongodb_url")),
         created_at=current_user["created_at"],
     )
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Send a password reset email. Always returns success to prevent email enumeration."""
+    db = get_db()
+    user = await db.users.find_one({"email": data.email})
+
+    if user:
+        token = create_reset_token(str(user["_id"]))
+        try:
+            await send_reset_email(
+                to_email=data.email,
+                user_name=user.get("name", "there"),
+                reset_token=token,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send reset email: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not send reset email. Please try again later.",
+            )
+
+    # Always return success to prevent email enumeration
+    return {"message": "If an account with that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Reset the user's password using the token from the email."""
+    user_id = verify_reset_token(data.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link. Please request a new one.",
+        )
+
+    if len(data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters.",
+        )
+
+    db = get_db()
+    from bson import ObjectId
+    result = await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"password_hash": hash_password(data.password)}},
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    return {"message": "Password reset successfully. You can now sign in."}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { BookOpen, ChevronDown, KeyRound, LogOut, Menu, PanelsTopLeft, Settings2, Sparkles, TriangleAlert, X } from 'lucide-react'
+import { BookOpen, ChevronDown, KeyRound, LogIn, LogOut, Menu, PanelsTopLeft, Settings2, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { useAuth } from '../../context/useAuth'
 import BrandMark from '../ui/BrandMark'
 
@@ -141,14 +141,20 @@ export default function Navbar() {
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 p-1">
-                    {marketingLinks.map((item) => (
-                      <NavLink key={item.to} to={item.to} className={navLinkClass}>
-                        {item.label}
-                      </NavLink>
-                    ))}
-                  </div>
+                  {marketingLinks.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `btn-ghost ${isActive ? 'border-slate-300 bg-white/86 text-slate-950' : ''}`.trim()
+                      }
+                    >
+                      <BookOpen className="h-4 w-4" />
+                      {item.label}
+                    </NavLink>
+                  ))}
                   <Link to="/login" className="btn-ghost">
+                    <LogIn className="h-4 w-4" />
                     Login
                   </Link>
                   <Link to="/register" className="btn-primary">
