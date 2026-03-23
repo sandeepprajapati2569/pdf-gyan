@@ -76,3 +76,38 @@ async def health_db():
         return {"status": "ok", "ping": result}
     except Exception as e:
         return {"status": "error", "detail": str(e), "type": type(e).__name__, "trace": traceback.format_exc()}
+
+
+@app.get("/api/health/smtp")
+async def health_smtp():
+    """Diagnostic endpoint to test SMTP connectivity."""
+    import asyncio
+    import smtplib
+    try:
+        def _test_smtp():
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                return "SMTP login successful"
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _test_smtp)
+        return {
+            "status": "ok",
+            "detail": result,
+            "smtp_host": settings.SMTP_HOST,
+            "smtp_port": settings.SMTP_PORT,
+            "smtp_user": settings.SMTP_USER,
+            "smtp_from": settings.SMTP_FROM_EMAIL,
+            "frontend_url": settings.FRONTEND_URL,
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "detail": str(e),
+            "type": type(e).__name__,
+            "smtp_host": settings.SMTP_HOST,
+            "smtp_port": settings.SMTP_PORT,
+            "smtp_user": settings.SMTP_USER,
+            "trace": traceback.format_exc(),
+        }
