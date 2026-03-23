@@ -13,6 +13,11 @@ async def connect_db():
     # Create indexes (non-blocking — app starts even if DB is temporarily unavailable)
     try:
         await db.users.create_index("email", unique=True)
+        await db.email_verifications.create_index(
+            [("email", 1), ("purpose", 1)],
+            unique=True,
+        )
+        await db.email_verifications.create_index("expires_at", expireAfterSeconds=0)
         await db.documents.create_index("user_id")
         await db.documents.create_index([("user_id", 1), ("status", 1)])
         await db.conversations.create_index([("user_id", 1), ("document_id", 1)])

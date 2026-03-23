@@ -36,12 +36,35 @@ async def upload(
             detail=f"File size exceeds {settings.MAX_FILE_SIZE_MB}MB limit",
         )
 
-    # Check if user has an OpenAI key configured (own or platform)
-    if not current_user.get("own_openai_key") and not settings.PLATFORM_OPENAI_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No OpenAI API key configured. Please add your key in Settings.",
-        )
+    mode = current_user.get("mode", "public")
+    if mode == "public":
+        if not settings.PLATFORM_OPENAI_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The platform OpenAI key is not configured right now. Please try again later.",
+            )
+    elif mode == "private":
+        if not current_user.get("own_openai_key"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OpenAI API key is required for private mode. Please add your key in Settings.",
+            )
+        if not current_user.get("private_mongodb_url"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MongoDB is required for private mode. Please reconnect your database in Settings.",
+            )
+    elif mode == "local":
+        if not current_user.get("private_mongodb_url"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MongoDB is required for local mode. Please reconnect your database in Settings.",
+            )
+        if not current_user.get("ollama_base_url") or not current_user.get("ollama_model"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ollama is required for local mode. Please finish local mode setup in Settings.",
+            )
 
     db = await get_user_db(current_user)
     doc = await upload_document(db, current_user["_id"], content, file.filename)

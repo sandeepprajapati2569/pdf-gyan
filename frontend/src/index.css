@@ -193,6 +193,27 @@ button:disabled {
   color: var(--teal);
 }
 
+.chat-live-indicator-speaking {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text);
+}
+
+.chat-composer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.chat-composer-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.chat-composer-row-compact {
+  align-items: center;
+}
+
 .chat-thinking-empty {
   display: flex;
   min-height: 4.25rem;
@@ -237,6 +258,136 @@ button:disabled {
 .chat-thinking-dots-compact span {
   width: 0.36rem;
   height: 0.36rem;
+}
+
+.chat-composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.talk-mode-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  background: rgba(255, 255, 255, 0.82);
+  width: 2.9rem;
+  min-width: 2.9rem;
+  height: 2.9rem;
+  color: var(--muted);
+  transition: 180ms ease;
+  position: relative;
+}
+
+.talk-mode-icon-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, 0.16);
+  color: var(--text);
+}
+
+.talk-mode-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.talk-mode-icon-btn-active {
+  border-color: rgba(15, 118, 110, 0.26);
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(15, 93, 117, 0.08));
+  color: var(--teal);
+  box-shadow: 0 14px 28px rgba(15, 118, 110, 0.12);
+}
+
+.talk-mode-icon-btn-live {
+  border-color: rgba(15, 118, 110, 0.3);
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 93, 117, 0.12));
+  color: var(--teal);
+  box-shadow:
+    0 16px 28px rgba(15, 118, 110, 0.14),
+    0 0 0 6px rgba(15, 118, 110, 0.08);
+}
+
+.talk-mode-dot {
+  position: absolute;
+  right: 0.48rem;
+  top: 0.48rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: rgba(82, 96, 119, 0.4);
+  transition: 180ms ease;
+}
+
+.talk-mode-dot-active {
+  background: rgba(15, 118, 110, 0.9);
+  box-shadow: 0 0 0 5px rgba(15, 118, 110, 0.12);
+}
+
+.chat-input-talk {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.88)),
+    rgba(255, 255, 255, 0.9);
+}
+
+.chat-input-listening {
+  border-color: rgba(15, 118, 110, 0.28);
+  box-shadow:
+    0 0 0 4px rgba(15, 118, 110, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.talk-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+  padding: 0.38rem 0.68rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.talk-mode-chip-live {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: rgba(240, 253, 250, 0.92);
+  color: var(--teal);
+}
+
+.talk-mode-status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.talk-mode-status-line-compact {
+  margin-top: -0.05rem;
+}
+
+.talk-mode-status-copy {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .chat-composer-row {
+    gap: 0.6rem;
+  }
+
+  .chat-composer-actions {
+    gap: 0.4rem;
+  }
+
+  .talk-mode-icon-btn {
+    width: 2.7rem;
+    min-width: 2.7rem;
+    height: 2.7rem;
+  }
 }
 
 .chat-button-status {

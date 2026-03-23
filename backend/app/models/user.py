@@ -7,6 +7,7 @@ class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str
+    verification_token: str
 
 
 class UserLogin(BaseModel):
@@ -22,6 +23,7 @@ class UserResponse(BaseModel):
     mode: str = "public"
     has_own_openai_key: bool = False
     has_private_mongodb: bool = False
+    has_ollama_config: bool = False
     created_at: datetime
 
 
@@ -38,3 +40,23 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     password: str
+
+
+class SignupOtpSendRequest(BaseModel):
+    email: EmailStr
+    name: Optional[str] = None
+
+
+class SignupOtpVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class SignupOtpSendResponse(BaseModel):
+    message: str
+    expires_in_minutes: int
+
+
+class SignupOtpVerifyResponse(BaseModel):
+    message: str
+    verification_token: str

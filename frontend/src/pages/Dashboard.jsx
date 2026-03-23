@@ -256,7 +256,7 @@ export default function Dashboard() {
                   style={{ animationDelay: `${index * 80}ms` }}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       {doc.status === 'ready' ? (
                         <button
                           type="button"
@@ -291,7 +291,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={(event) => handleDelete(doc.id, event)}
-                      className="grid h-10 w-10 place-items-center rounded-2xl border border-transparent bg-white/70 text-slate-400 hover:border-red-100 hover:bg-red-50 hover:text-red-600"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-transparent bg-white/70 text-slate-400 hover:border-red-100 hover:bg-red-50 hover:text-red-600"
                       aria-label="Delete document"
                     >
                       <Trash2 className="h-4 w-4" />

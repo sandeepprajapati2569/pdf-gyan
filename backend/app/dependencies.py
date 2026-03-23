@@ -33,7 +33,7 @@ async def get_current_user(
 
 async def get_user_db(user: dict) -> AsyncIOMotorDatabase:
     """Returns the correct database for this user based on their mode."""
-    if user.get("mode") == "private" and user.get("private_mongodb_url"):
+    if user.get("mode") in {"private", "local"} and user.get("private_mongodb_url"):
         try:
             from app.services.private_db_service import get_private_db
             return await get_private_db(user)

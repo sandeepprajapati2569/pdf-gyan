@@ -20,6 +20,10 @@ class MultiChatRequest(BaseModel):
     conversation_id: Optional[str] = None
 
 
+class TtsRequest(BaseModel):
+    text: str
+
+
 class ChatResponse(BaseModel):
     message: str
     conversation_id: str

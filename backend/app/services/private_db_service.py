@@ -60,6 +60,15 @@ async def test_private_connection(url: str, db_name: str) -> bool:
         return False
 
 
+async def reset_private_db(user_id: str):
+    """Drop any cached private DB client for this user after settings change."""
+    async with _lock:
+        cache_key = str(user_id)
+        if cache_key in _private_clients:
+            client, _, _ = _private_clients.pop(cache_key)
+            client.close()
+
+
 async def close_all_private_clients():
     """Called during app shutdown."""
     for uid, (client, _, _) in _private_clients.items():

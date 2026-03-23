@@ -6,7 +6,6 @@ import {
   Loader2,
   Menu,
   Plus,
-  Send,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -14,6 +13,9 @@ import { getDocument } from '../api/documents'
 import { sendMultiMessage, getMultiChatHistory, getConversation, readChatStream } from '../api/chat'
 import toast from 'react-hot-toast'
 import AssistantMessage from '../components/chat/AssistantMessage'
+import ChatComposer from '../components/chat/ChatComposer'
+import { useTalkMode } from '../hooks/useTalkMode'
+import { useAuth } from '../context/useAuth'
 
 const conversationDate = new Intl.DateTimeFormat('en', {
   month: 'short',
@@ -30,6 +32,7 @@ const historyStorageKey = (docsParam) => `pdf-gyan:last-multi-chat:${docsParam}`
 export default function MultiChatPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [documents, setDocuments] = useState([])
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -40,6 +43,7 @@ export default function MultiChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const messagesEndRef = useRef(null)
   const restoredConversationRef = useRef(false)
+  const submitMessageRef = useRef(null)
 
   const docsParam = searchParams.get('docs') || ''
   const docIds = docsParam.split(',').filter(Boolean)
@@ -70,21 +74,46 @@ export default function MultiChatPage() {
     }
   }, [])
 
+  const {
+    talkModeEnabled,
+    recognitionSupported,
+    speechSupported,
+    isListening,
+    isSpeaking,
+    voiceEngine,
+    toggleTalkMode,
+    toggleListening,
+    stopListening,
+    stopSpeaking,
+    beginStreamingSpeech,
+    appendStreamingSpeechChunk,
+    finishStreamingSpeech,
+  } = useTalkMode({
+    onDraftChange: setInput,
+    onSubmitMessage: (message) => submitMessageRef.current?.(message),
+    busy: streaming,
+    preferAiVoice: user?.mode !== 'local',
+  })
+
   useEffect(() => {
     if (docIds.length < 2) {
       navigate('/dashboard')
       return
     }
 
+    stopListening()
+    stopSpeaking()
     setMessages([])
     setConversationId(null)
     restoredConversationRef.current = false
     loadDocuments()
     loadConversations()
-  }, [docIds.length, docsParam, loadConversations, loadDocuments, navigate])
+  }, [docIds.length, docsParam, loadConversations, loadDocuments, navigate, stopListening, stopSpeaking])
 
   const loadConversation = useCallback(async (convId) => {
     try {
+      stopSpeaking()
+      stopListening()
       const res = await getConversation(convId)
       setMessages(res.data.messages || [])
       setConversationId(convId)
@@ -93,9 +122,11 @@ export default function MultiChatPage() {
     } catch {
       toast.error('Failed to load conversation')
     }
-  }, [docsParam])
+  }, [docsParam, stopListening, stopSpeaking])
 
   const startNewChat = () => {
+    stopSpeaking()
+    stopListening()
     setMessages([])
     setConversationId(null)
     localStorage.removeItem(historyStorageKey(docsParam))
@@ -189,11 +220,11 @@ export default function MultiChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = async (event) => {
-    event.preventDefault()
-    if (!input.trim() || streaming) return
+  const submitMessage = useCallback(async (messageText) => {
+    const userMessage = messageText.trim()
+    if (!userMessage || streaming) return
 
-    const userMessage = input.trim()
+    stopSpeaking()
     setInput('')
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }])
     setStreaming(true)
@@ -207,6 +238,7 @@ export default function MultiChatPage() {
       let assistantContent = ''
 
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+      beginStreamingSpeech()
 
       await readChatStream(response, (data) => {
         if (data === '[DONE]') return
@@ -224,6 +256,7 @@ export default function MultiChatPage() {
         if (!cleanData) return
 
         assistantContent += cleanData
+        appendStreamingSpeechChunk(cleanData)
         setMessages((prev) => {
           const updated = [...prev]
           updated[updated.length - 1] = {
@@ -233,7 +266,9 @@ export default function MultiChatPage() {
           return updated
         })
       })
+      finishStreamingSpeech()
     } catch (err) {
+      stopSpeaking()
       toast.error(err.message || 'Failed to get response')
       setMessages((prev) =>
         prev[prev.length - 1]?.role === 'assistant' ? prev.slice(0, -1) : prev,
@@ -241,6 +276,23 @@ export default function MultiChatPage() {
     } finally {
       setStreaming(false)
     }
+  }, [
+    appendStreamingSpeechChunk,
+    beginStreamingSpeech,
+    conversationId,
+    docIds,
+    docsParam,
+    finishStreamingSpeech,
+    loadConversations,
+    stopSpeaking,
+    streaming,
+  ])
+
+  submitMessageRef.current = submitMessage
+
+  const handleSend = async (event) => {
+    event.preventDefault()
+    await submitMessage(input)
   }
 
   if (loading) {
@@ -355,6 +407,7 @@ export default function MultiChatPage() {
                         icon={Files}
                         content={msg.content}
                         isStreaming={streaming && index === messages.length - 1}
+                        isSpeaking={isSpeaking && index === messages.length - 1}
                         pendingLabel="Comparing the selected documents"
                       />
                     ) : (
@@ -369,35 +422,23 @@ export default function MultiChatPage() {
             )}
           </div>
 
-          <div className="border-t border-slate-200/80 bg-white/55 px-4 py-4 sm:px-6">
-            <form onSubmit={handleSend} className="flex gap-3">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask for patterns, differences, overlaps, or summaries across all selected documents..."
-                className="field-input"
-                disabled={streaming}
-              />
-              <button type="submit" disabled={!input.trim() || streaming} className="btn-primary shrink-0 px-4 sm:px-5">
-                {streaming ? (
-                  <span className="chat-button-status">
-                    <span className="chat-thinking-dots chat-thinking-dots-compact" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                    <span className="hidden sm:inline">Answering</span>
-                  </span>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span className="hidden sm:inline">Send</span>
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+          <ChatComposer
+            input={input}
+            onInputChange={setInput}
+            onSubmit={handleSend}
+            placeholder="Ask for patterns, differences, overlaps, or summaries across all selected documents..."
+            streaming={streaming}
+            talkModeEnabled={talkModeEnabled}
+            talkModeAvailable={recognitionSupported || speechSupported}
+            recognitionSupported={recognitionSupported}
+            speechSupported={speechSupported}
+            isListening={isListening}
+            isSpeaking={isSpeaking}
+            voiceEngine={voiceEngine}
+            onToggleTalkMode={toggleTalkMode}
+            onToggleListening={toggleListening}
+            onStopSpeaking={stopSpeaking}
+          />
         </section>
       </div>
     </div>

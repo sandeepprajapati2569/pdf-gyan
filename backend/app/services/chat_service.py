@@ -109,7 +109,6 @@ Directly return the final JSON structure. Do not output anything else."""
     search_response = await llm_service.completion(
         user=user,
         messages=[{"role": "user", "content": search_prompt}],
-        model="gpt-4o",
     )
     search_text = search_response.choices[0].message.content.strip()
 
@@ -249,7 +248,7 @@ Present ALL relevant content from the document for this question. Use the exact 
     # Stream Response
     full_response = ""
     async for chunk in llm_service.stream_completion(
-        user=user, messages=answer_messages, model="gpt-4o"
+        user=user, messages=answer_messages
     ):
         full_response += chunk
         yield chunk
@@ -343,7 +342,7 @@ CRITICAL RULES — follow these exactly:
     # Stream response
     full_response = ""
     async for chunk in llm_service.stream_completion(
-        user=user, messages=answer_messages, model="gpt-4o"
+        user=user, messages=answer_messages
     ):
         full_response += chunk
         yield chunk

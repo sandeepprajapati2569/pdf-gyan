@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from app.dependencies import get_current_user, get_user_db
 from app.services.document_service import get_document_with_tree
 from app.services.chat_service import (
@@ -9,7 +9,8 @@ from app.services.chat_service import (
     get_multi_conversations,
     get_conversation,
 )
-from app.models.conversation import ChatRequest, MultiChatRequest, ConversationResponse, ChatMessage
+from app.models.conversation import ChatRequest, MultiChatRequest, TtsRequest, ConversationResponse, ChatMessage
+from app.services.tts_service import TTSUnavailableError, create_openai_speech
 from typing import List
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -18,6 +19,23 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 def _format_sse_data(chunk: str) -> str:
     normalized = chunk.replace("\r\n", "\n").replace("\r", "\n")
     return "".join(f"data: {line}\n" for line in normalized.split("\n")) + "\n"
+
+
+@router.post("/tts")
+async def create_tts_audio(
+    request: TtsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        audio_bytes = await create_openai_speech(current_user, request.text)
+    except TTSUnavailableError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # Static routes MUST come before parameterized routes

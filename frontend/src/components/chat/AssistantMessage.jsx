@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import { Volume2 } from 'lucide-react'
 
 function ThinkingDots({ compact = false }) {
   return (
@@ -14,6 +15,7 @@ export default function AssistantMessage({
   content,
   icon,
   isStreaming = false,
+  isSpeaking = false,
   pendingLabel = 'Reading the document',
 }) {
   const Icon = icon
@@ -30,6 +32,13 @@ export default function AssistantMessage({
           <div className="chat-live-indicator">
             <ThinkingDots compact />
             <span>{hasContent ? 'Answering live' : pendingLabel}</span>
+          </div>
+        ) : null}
+
+        {isSpeaking ? (
+          <div className="chat-live-indicator chat-live-indicator-speaking">
+            <Volume2 className="h-3.5 w-3.5" />
+            <span>Speaking aloud</span>
           </div>
         ) : null}
 
