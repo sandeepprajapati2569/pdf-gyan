@@ -211,10 +211,10 @@ export default function Settings() {
 
   const usageCards = usage
     ? [
-        { label: 'Total requests', value: usage.total_requests.toLocaleString() },
-        { label: 'Total tokens', value: usage.total_tokens.toLocaleString() },
-        { label: 'Prompt tokens', value: usage.prompt_tokens.toLocaleString() },
-        { label: 'Completion tokens', value: usage.completion_tokens.toLocaleString() },
+        { label: 'Requests', value: usage.total_requests.toLocaleString(), accent: 'var(--teal)' },
+        { label: 'Total tokens', value: usage.total_tokens.toLocaleString(), accent: '#6366f1' },
+        { label: 'Prompt', value: usage.prompt_tokens.toLocaleString(), accent: '#f59e0b' },
+        { label: 'Completion', value: usage.completion_tokens.toLocaleString(), accent: '#10b981' },
       ]
     : []
 
@@ -284,61 +284,67 @@ export default function Settings() {
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
         <div className="premium-card p-6 sm:p-8">
           <span className="eyebrow">Workspace controls</span>
-          <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-3">
-              <h1 className="font-display text-4xl text-slate-950 sm:text-[3.4rem]">Modes & access</h1>
-              <p className="max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                Manage keys, choose where data lives, and decide whether the workspace runs on the
-                platform, your OpenAI stack, or Ollama on your machine.
-              </p>
+          <div className="mt-5 space-y-3">
+            <h1 className="font-display text-3xl sm:text-4xl" style={{ color: 'var(--text)' }}>Modes & access</h1>
+            <p className="max-w-2xl text-sm leading-7" style={{ color: 'var(--muted)' }}>
+              Manage keys, choose where data lives, and decide whether the workspace runs on the
+              platform, your OpenAI stack, or Ollama on your machine.
+            </p>
+          </div>
+
+          {/* Current mode card */}
+          <div className="mt-6 rounded-2xl border p-5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl" style={{ background: 'var(--teal-soft)' }}>
+                <CurrentModeIcon className="h-5 w-5" style={{ color: 'var(--teal)' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{currentModeMeta.title}</p>
+                  <span className={`${currentModeMeta.pillClass}`}>{currentModeMeta.pillLabel}</span>
+                </div>
+                <p className="mt-0.5 text-xs leading-5" style={{ color: 'var(--muted-soft)' }}>{currentModeMeta.description}</p>
+              </div>
             </div>
-            <div className="soft-card max-w-md px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div className="icon-shell h-11 w-11 shrink-0">
-                  <CurrentModeIcon className="h-5 w-5" />
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {currentModeSignals.map((item) => (
+                <div key={item.label} className="rounded-xl p-3" style={{ background: 'var(--surface-soft)', border: '1px solid var(--border)' }}>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: 'var(--muted-soft)' }}>{item.label}</p>
+                  <p className="mt-1 text-sm font-bold" style={{ color: 'var(--text)' }}>{item.value}</p>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Current mode</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-950">{currentModeMeta.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">{currentModeMeta.description}</p>
-                </div>
-              </div>
-              <span className={`${currentModeMeta.pillClass} mt-4`}>{currentModeMeta.pillLabel}</span>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                {currentModeSignals.map((item) => (
-                  <div key={item.label} className="rounded-[18px] border border-white/60 bg-white/72 px-3 py-3">
-                    <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-950">{item.value}</p>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
         </div>
 
         <div className="premium-card p-6 sm:p-7">
-          <div className="flex items-center gap-3">
-            <div className="icon-shell h-12 w-12">
-              <BarChart3 className="h-5 w-5" />
+          <div className="flex items-center gap-3 mb-5">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl" style={{ background: '#6366f110' }}>
+              <BarChart3 className="h-4 w-4" style={{ color: '#6366f1' }} />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Usage</p>
-              <h2 className="text-xl font-semibold text-slate-950">Recent usage</h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: 'var(--muted-soft)' }}>Usage</p>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>Token consumption</h2>
             </div>
           </div>
 
           {usage ? (
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               {usageCards.map((item) => (
-                <div key={item.label} className="soft-card p-4">
-                  <p className="text-sm text-slate-500">{item.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-950">{item.value}</p>
+                <div key={item.label} className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="h-2 w-2 rounded-full" style={{ background: item.accent }} />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--muted-soft)' }}>{item.label}</p>
+                  </div>
+                  <p className="text-2xl font-bold" style={{ color: 'var(--text)' }}>{item.value}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="soft-card mt-6 p-5 text-sm leading-7 text-slate-500">
-              No usage data is available yet. Once you start uploading and chatting, your activity will appear here.
+            <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl" style={{ background: 'var(--surface-soft)' }}>
+              <BarChart3 className="h-8 w-8" style={{ color: 'var(--border)' }} />
+              <p className="mt-3 text-xs font-medium" style={{ color: 'var(--muted)' }}>No usage data yet</p>
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--muted-soft)' }}>Start chatting to see token consumption</p>
             </div>
           )}
         </div>
@@ -689,14 +695,7 @@ export default function Settings() {
       </section>
 
       {/* Team Workspaces */}
-      <section className="mt-8">
-        <div className="mb-5 section-intro">
-          <span className="eyebrow">Collaboration</span>
-          <h2 className="font-display text-3xl text-slate-950">Team workspaces</h2>
-          <p className="max-w-2xl text-sm leading-6 text-slate-600">
-            Invite teammates, assign roles, and keep shared access tidy as the workspace grows.
-          </p>
-        </div>
+      <section className="mt-6">
         <TeamPanel />
       </section>
     </div>

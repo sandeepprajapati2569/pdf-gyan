@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from app.database import connect_db, close_db
 from app.services.private_db_service import close_all_private_clients
 from app.routers import auth, documents, chat, settings as settings_router, api_keys, public_api, voice_call, website, embed, shared, bookmarks, analytics, teams, workspace
+from app.routers.webhooks import router as webhooks_api_router, user_router as webhooks_user_router
 
 
 @asynccontextmanager
@@ -78,6 +79,8 @@ app.include_router(embed.router)
 app.include_router(shared.router)
 app.include_router(bookmarks.router)
 app.include_router(analytics.router)
+app.include_router(webhooks_api_router)
+app.include_router(webhooks_user_router)
 app.include_router(workspace.router)
 app.include_router(teams.router)
 

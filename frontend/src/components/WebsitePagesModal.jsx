@@ -13,7 +13,14 @@ const STATUS_CONFIG = {
   failed: { label: 'Failed', icon: AlertTriangle, color: 'var(--danger)', bg: 'rgba(194,65,12,0.08)' },
 }
 
-export default function WebsitePagesModal({ docId, docName, onClose, onIndexed }) {
+function FaviconImg({ url, favicon, size = 'h-5 w-5' }) {
+  const [failed, setFailed] = useState(false)
+  const src = !failed && (favicon || (url ? `https://www.google.com/s2/favicons?domain=${(() => { try { return new URL(url).hostname } catch { return '' } })()}&sz=64` : null))
+  if (!src || failed) return <Globe className={size} style={{ color: '#f59e0b' }} />
+  return <img src={src} alt="" className={`${size} shrink-0 rounded-sm object-contain`} onError={() => setFailed(true)} />
+}
+
+export default function WebsitePagesModal({ docId, docName, sourceUrl, faviconUrl, onClose, onIndexed }) {
   const [pages, setPages] = useState([])
   const [totalPages, setTotalPages] = useState(1)
   const [stats, setStats] = useState({ crawled: 0, discovered: 0, failed: 0, included: 0 })
@@ -126,7 +133,7 @@ export default function WebsitePagesModal({ docId, docName, onClose, onIndexed }
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" style={{ background: '#f59e0b15' }}>
-                <Globe className="h-5 w-5" style={{ color: '#f59e0b' }} />
+                <FaviconImg url={sourceUrl} favicon={faviconUrl} size="h-6 w-6" />
               </div>
               <div>
                 <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>{docName}</h2>

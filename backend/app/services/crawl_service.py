@@ -246,6 +246,14 @@ async def crawl_website_pages(
             limits=httpx.Limits(max_connections=5),
         ) as client:
 
+            # ── Fetch favicon ──
+            favicon_url = await _fetch_favicon(client, base_url)
+            if favicon_url:
+                await db.documents.update_one(
+                    {"_id": ObjectId(doc_id)},
+                    {"$set": {"favicon_url": favicon_url}},
+                )
+
             # ── Discovery phase: find ALL URLs ──
             await _send_progress(doc_id, {"type": "discovery", "phase": "sitemap", "urls_found": 0})
 
@@ -885,6 +893,51 @@ def _build_markdown(pages, domain):
                 parts.append("")
 
     return "\n".join(parts)
+
+
+async def _fetch_favicon(client: httpx.AsyncClient, base_url: str) -> str | None:
+    """Try to find the website favicon URL. Returns the URL string or None."""
+    # Strategy 1: Check common favicon paths
+    for path in ["/favicon.ico", "/favicon.png", "/apple-touch-icon.png"]:
+        try:
+            resp = await client.head(f"{base_url}{path}")
+            if resp.status_code == 200:
+                content_type = resp.headers.get("content-type", "")
+                if "image" in content_type or path.endswith(".ico"):
+                    return f"{base_url}{path}"
+        except Exception:
+            pass
+
+    # Strategy 2: Parse the homepage HTML for <link rel="icon"> tags
+    try:
+        resp = await client.get(base_url, follow_redirects=True)
+        if resp.status_code == 200:
+            html = resp.text[:10000]  # Only check first 10KB
+            # Look for <link rel="icon" href="..."> or <link rel="shortcut icon" href="...">
+            import re
+            patterns = [
+                r'<link[^>]*rel=["\'](?:shortcut )?icon["\'][^>]*href=["\']([^"\']+)["\']',
+                r'<link[^>]*href=["\']([^"\']+)["\'][^>]*rel=["\'](?:shortcut )?icon["\']',
+                r'<link[^>]*rel=["\']apple-touch-icon["\'][^>]*href=["\']([^"\']+)["\']',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    href = match.group(1)
+                    if href.startswith("http"):
+                        return href
+                    elif href.startswith("//"):
+                        return f"https:{href}"
+                    elif href.startswith("/"):
+                        return f"{base_url}{href}"
+                    else:
+                        return f"{base_url}/{href}"
+    except Exception:
+        pass
+
+    # Strategy 3: Google favicon service as fallback
+    domain = urlparse(base_url).netloc
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
 
 def _matches_patterns(url, include_patterns=None, exclude_patterns=None):

@@ -9,6 +9,7 @@ import client from '../api/client'
 import toast from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
 import AccessModal from '../components/workspace/AccessModal'
+import FilePreviewModal from '../components/workspace/FilePreviewModal'
 
 const FILE_ICONS = { pdf: FileText, xlsx: FileSpreadsheet, pptx: Presentation, docx: FileText, txt: FileText }
 
@@ -36,9 +37,10 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
 
-  // Sort & filter
+  // Sort, filter & search
   const [sortBy, setSortBy] = useState('folders-first')
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Modals
   const [newFolderOpen, setNewFolderOpen] = useState(false)
@@ -49,6 +51,7 @@ export default function WorkspacePage() {
   const [renameName, setRenameName] = useState('')
   const [moveTarget, setMoveTarget] = useState(null) // {type:'file'|'folder', id}
   const [accessTarget, setAccessTarget] = useState(null) // {type:'file'|'folder', id, name, access}
+  const [previewFile, setPreviewFile] = useState(null) // {id, name, file_type, page_count}
   const [allFolders, setAllFolders] = useState([])
   const [moveDestination, setMoveDestination] = useState(null)
 
@@ -92,19 +95,33 @@ export default function WorkspacePage() {
         const form = new FormData()
         form.append('file', file)
         if (currentFolderId) form.append('folder_id', currentFolderId)
-        await client.post('/api/workspace/upload', form, {
+        const res = await client.post('/api/workspace/upload', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         })
+        // Optimistically add to file list (no full reload)
+        const newFile = res.data
+        setFiles(prev => [{
+          id: newFile.id,
+          original_filename: newFile.original_filename,
+          file_type: newFile.file_type,
+          char_count: newFile.char_count || 0,
+          page_count: newFile.page_count,
+          status: newFile.status || 'ready',
+          folder_id: newFile.folder_id,
+          access_level: 'workspace',
+          shared_with: [],
+          created_at: new Date().toISOString(),
+        }, ...prev])
         toast.success(`Uploaded ${file.name}`)
       } catch (err) {
         console.error('Upload error:', err.response?.data || err)
         const d = err.response?.data?.detail
-        toast.error(typeof d === 'string' ? d : Array.isArray(d) ? d.map(e => e.msg || '').join(', ') : `Failed: ${file.name}`)
+        const msg = typeof d === 'string' ? d : Array.isArray(d) ? d.map(e => typeof e === 'string' ? e : e.msg || JSON.stringify(e)).join(', ') : `Failed to upload ${file.name}`
+        toast.error(msg)
       }
     }
     setUploading(false)
-    loadContents()
-  }, [currentFolderId, loadContents])
+  }, [currentFolderId])
 
   const { getRootProps, getInputProps, isDragActive, open: openFilePicker } = useDropzone({ onDrop, accept: ACCEPT, multiple: true, noClick: true })
 
@@ -113,8 +130,21 @@ export default function WorkspacePage() {
     e.preventDefault()
     if (!newFolderName.trim()) return
     try {
-      await client.post('/api/workspace/folders', { name: newFolderName, parent_id: currentFolderId, color: newFolderColor })
-      setNewFolderOpen(false); setNewFolderName(''); loadContents()
+      const res = await client.post('/api/workspace/folders', { name: newFolderName, parent_id: currentFolderId, color: newFolderColor })
+      const newFolder = res.data
+      // Optimistically add to folder list
+      setFolders(prev => [{
+        id: newFolder._id || newFolder.id,
+        name: newFolder.name || newFolderName,
+        parent_id: currentFolderId,
+        color: newFolder.color || newFolderColor,
+        item_count: 0,
+        access_level: 'workspace',
+        shared_with: [],
+        created_at: new Date().toISOString(),
+      }, ...prev])
+      setNewFolderOpen(false); setNewFolderName('')
+      toast.success('Folder created')
     } catch { toast.error('Failed to create folder') }
   }
 
@@ -224,7 +254,12 @@ export default function WorkspacePage() {
     ...files.map(f => ({ ...f, _kind: 'file', _name: f.original_filename, _date: f.created_at })),
   ]
 
-  const sortedItems = [...allItems].sort((a, b) => {
+  // Filter by search query
+  const filteredItems = searchQuery.trim()
+    ? allItems.filter(item => item._name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : allItems
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
     if (sortBy === 'folders-first') return a._kind === b._kind ? 0 : a._kind === 'folder' ? -1 : 1
     if (sortBy === 'files-first') return a._kind === b._kind ? 0 : a._kind === 'file' ? -1 : 1
     if (sortBy === 'newest') return new Date(b._date || 0) - new Date(a._date || 0)
@@ -277,6 +312,24 @@ export default function WorkspacePage() {
 
               {/* Actions */}
               <div className="flex items-center gap-2 shrink-0">
+                {/* Search */}
+                <div className="relative hidden sm:block">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3" style={{ color: 'var(--muted-soft)' }} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search..."
+                    className="rounded-lg border bg-transparent pl-7 pr-2 py-1.5 text-[11px] outline-none w-36 transition focus:w-48 focus:border-[var(--teal)]"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-soft)' }}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
                 {/* Sort button */}
                 <div className="relative">
                   <button onClick={() => setSortMenuOpen(!sortMenuOpen)}
@@ -415,7 +468,7 @@ export default function WorkspacePage() {
                         draggable
                         onDragStart={() => handleDragStart('file', item.id)}
                         onDragEnd={handleDragEnd}
-                        onClick={() => startChat(item.id)}
+                        onClick={() => setPreviewFile({ id: item.id, name: item.original_filename, file_type: item.file_type, page_count: item.page_count })}
                         onContextMenu={(e) => handleContextMenu(e, { _kind: 'file', id: item.id, name: item.original_filename, access_level: item.access_level, shared_with: item.shared_with })}
                         className="group premium-card min-w-0 cursor-pointer overflow-hidden transition-all hover:-translate-y-1 hover:shadow-lg">
                         <div className="h-1.5 w-full rounded-t-[inherit]" style={{ background: `linear-gradient(90deg, ${color}, ${color}66)` }} />
@@ -425,6 +478,9 @@ export default function WorkspacePage() {
                               <Icon className="h-5 w-5" style={{ color }} />
                             </div>
                             <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
+                              <button onClick={(e) => { e.stopPropagation(); startChat(item.id) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-teal-50 transition" title="Chat with file">
+                                <MessageSquareText className="h-3 w-3" style={{ color: 'var(--teal)' }} />
+                              </button>
                               <button onClick={(e) => { e.stopPropagation(); openMoveModal('file', item.id) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-slate-100 transition">
                                 <Move className="h-3 w-3" style={{ color: 'var(--muted-soft)' }} />
                               </button>
@@ -692,6 +748,19 @@ export default function WorkspacePage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ════ FILE PREVIEW ════ */}
+      {previewFile && (
+        <FilePreviewModal
+          fileId={previewFile.id}
+          fileName={previewFile.name}
+          fileType={previewFile.file_type}
+          pageCount={previewFile.page_count}
+          source="workspace"
+          onClose={() => setPreviewFile(null)}
+          onChat={() => { setPreviewFile(null); startChat(previewFile.id) }}
+        />
       )}
 
       {/* ════ ACCESS MODAL ════ */}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
 import client from '../../api/client'
 
-export default function PageViewer({ documentId, pageNum, totalPages, onClose, onPageChange }) {
+export default function PageViewer({ documentId, pageNum, totalPages, highlightText, onClose, onPageChange }) {
   const [loading, setLoading] = useState(true)
   const [imageSrc, setImageSrc] = useState(null)
   const [error, setError] = useState(false)
@@ -13,7 +13,10 @@ export default function PageViewer({ documentId, pageNum, totalPages, onClose, o
     setError(false)
     setImageSrc(null)
 
-    client.get(`/api/documents/${documentId}/page/${pageNum}`, { responseType: 'blob' })
+    const params = {}
+    if (highlightText) params.highlight = highlightText
+
+    client.get(`/api/documents/${documentId}/page/${pageNum}`, { responseType: 'blob', params })
       .then(res => {
         if (cancelled) return
         const url = URL.createObjectURL(res.data)
@@ -27,7 +30,7 @@ export default function PageViewer({ documentId, pageNum, totalPages, onClose, o
       })
 
     return () => { cancelled = true }
-  }, [documentId, pageNum])
+  }, [documentId, pageNum, highlightText])
 
   // Clean up blob URLs
   useEffect(() => {

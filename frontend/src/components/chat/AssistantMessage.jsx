@@ -18,32 +18,46 @@ function AnnotatedContent({ content, onPageClick }) {
     return <ReactMarkdown>{content}</ReactMarkdown>
   }
 
-  // Split on [Page X] pattern
-  const parts = content.split(/(\[Page \d+\])/g)
+  // Regex matches both [Page X: "quote"] and [Page X]
+  const CITATION_RE = /(\[Page \d+(?::\s*"[^"]*")?\])/g
 
   return (
     <ReactMarkdown
       components={{
         p: ({ children }) => {
-          // Process text children to find [Page X] references
           const processChildren = (child) => {
             if (typeof child !== 'string') return child
-            const segments = child.split(/(\[Page \d+\])/g)
+            const segments = child.split(CITATION_RE)
             return segments.map((segment, i) => {
-              const match = segment.match(/\[Page (\d+)\]/)
-              if (match) {
-                const pageNum = parseInt(match[1])
+              // Try [Page X: "quote"] first
+              const quoteMatch = segment.match(/\[Page (\d+):\s*"([^"]*)"\]/)
+              if (quoteMatch) {
+                const pageNum = parseInt(quoteMatch[1])
+                const quote = quoteMatch[2]
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onPageClick(pageNum, quote) }}
+                    className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold transition hover:-translate-y-0.5 hover:shadow-sm mx-0.5"
+                    style={{ borderColor: 'var(--teal-soft)', background: 'var(--teal-soft)', color: 'var(--teal)' }}
+                    title={`"${quote}"`}
+                  >
+                    Page {pageNum}
+                  </button>
+                )
+              }
+              // Fall back to [Page X]
+              const simpleMatch = segment.match(/\[Page (\d+)\]/)
+              if (simpleMatch) {
+                const pageNum = parseInt(simpleMatch[1])
                 return (
                   <button
                     key={i}
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onPageClick(pageNum) }}
                     className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-semibold transition hover:-translate-y-0.5 mx-0.5"
-                    style={{
-                      borderColor: 'var(--teal-soft)',
-                      background: 'var(--teal-soft)',
-                      color: 'var(--teal)',
-                    }}
+                    style={{ borderColor: 'var(--teal-soft)', background: 'var(--teal-soft)', color: 'var(--teal)' }}
                   >
                     Page {pageNum}
                   </button>

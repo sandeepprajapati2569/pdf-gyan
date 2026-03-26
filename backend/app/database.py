@@ -36,6 +36,9 @@ async def connect_db():
         await db.website_pages.create_index([("doc_id", 1), ("category", 1)])
         await db.website_pages.create_index([("doc_id", 1), ("url", 1)], unique=True)
         await db.website_pages.create_index([("doc_id", 1), ("included", 1)])
+        # Webhooks
+        await db.webhooks.create_index([("user_id", 1), ("event_type", 1)])
+        await db.webhook_logs.create_index([("webhook_id", 1), ("created_at", -1)])
         # Workspace files + folders
         await db.workspace_files.create_index([("user_id", 1), ("status", 1)])
         await db.workspace_files.create_index([("user_id", 1), ("file_type", 1)])

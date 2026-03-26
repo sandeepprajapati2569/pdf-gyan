@@ -34,6 +34,13 @@ const conversationDate = new Intl.DateTimeFormat('en', {
   day: 'numeric',
 })
 
+function ChatFavicon({ url, favicon }) {
+  const [failed, setFailed] = useState(false)
+  const src = !failed && (favicon || (url ? `https://www.google.com/s2/favicons?domain=${(() => { try { return new URL(url).hostname } catch { return '' } })()}&sz=64` : null))
+  if (!src || failed) return <Globe className="h-4 w-4" style={{ color: 'var(--teal)' }} />
+  return <img src={src} alt="" className="h-4 w-4 shrink-0 rounded-sm object-contain" onError={() => setFailed(true)} />
+}
+
 const pdfPromptIdeas = [
   'Give me the top three takeaways from this PDF.',
   'Summarize the important risks, dates, and next steps.',
@@ -240,50 +247,52 @@ export default function ChatPage() {
       </div>
 
       {/* Tab switcher */}
-      <div className="px-4 pt-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setSidebarTab('history')}
-          className={`text-xs font-semibold uppercase tracking-[0.18em] px-2 py-1 rounded-lg transition ${
-            sidebarTab === 'history' ? 'text-slate-950 bg-white/80' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          History
-        </button>
-        <button
-          type="button"
-          onClick={() => setSidebarTab('bookmarks')}
-          className={`text-xs font-semibold uppercase tracking-[0.18em] px-2 py-1 rounded-lg transition flex items-center gap-1 ${
-            sidebarTab === 'bookmarks' ? 'text-slate-950 bg-white/80' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <Bookmark className="h-3 w-3" />
-          Pins{bookmarks.length > 0 ? ` (${bookmarks.length})` : ''}
-        </button>
+      <div className="px-4 pt-4 flex items-center gap-1">
+        {[
+          { key: 'history', label: 'History', icon: null, count: conversations.length },
+          { key: 'bookmarks', label: 'Pins', icon: Bookmark, count: bookmarks.length },
+        ].map(tab => {
+          const active = sidebarTab === tab.key
+          const TabIcon = tab.icon
+          return (
+            <button key={tab.key} type="button" onClick={() => setSidebarTab(tab.key)}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition"
+              style={{
+                background: active ? 'var(--teal-soft)' : 'transparent',
+                color: active ? 'var(--teal)' : 'var(--muted-soft)',
+              }}>
+              {TabIcon && <TabIcon className="h-3 w-3" />}
+              {tab.label}
+              {tab.count > 0 && <span className="ml-0.5 rounded-md px-1 py-0 text-[9px] font-bold" style={{ background: active ? 'var(--teal)' : 'var(--border)', color: active ? 'white' : 'var(--muted-soft)' }}>{tab.count}</span>}
+            </button>
+          )
+        })}
       </div>
 
       <div className="chat-scroll flex-1 px-3 pb-3 pt-3">
         {sidebarTab === 'bookmarks' ? (
           /* Bookmarks tab */
           bookmarks.length === 0 ? (
-            <div className="soft-card p-4 text-sm leading-6 text-slate-500">
-              Bookmark important AI responses to find them quickly later.
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <Bookmark className="h-8 w-8" style={{ color: 'var(--border)' }} />
+              <p className="mt-3 text-xs font-medium" style={{ color: 'var(--muted)' }}>No pins yet</p>
+              <p className="mt-1 text-[10px] max-w-[180px] leading-4" style={{ color: 'var(--muted-soft)' }}>
+                Hover over an AI response and click the bookmark icon to pin it.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
               {bookmarks.map((bm) => (
-                <div key={bm.id} className="rounded-[18px] bg-white/80 p-3 text-left">
-                  <p className="text-xs text-slate-700 line-clamp-3 leading-5">{bm.content}</p>
+                <div key={bm.id} className="group rounded-xl border p-3 text-left transition hover:shadow-sm"
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+                  <p className="text-[11px] line-clamp-3 leading-5" style={{ color: 'var(--text)' }}>{bm.content}</p>
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-[10px] text-slate-400">
-                      {new Date(bm.created_at).toLocaleDateString()}
+                    <p className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>
+                      {new Date(bm.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteBookmark(bm.id)}
-                      className="text-slate-400 hover:text-red-500 transition"
-                    >
-                      <Trash2 className="h-3 w-3" />
+                    <button type="button" onClick={() => handleDeleteBookmark(bm.id)}
+                      className="opacity-0 group-hover:opacity-100 transition" style={{ color: 'var(--muted-soft)' }}>
+                      <Trash2 className="h-3 w-3 hover:text-red-500" />
                     </button>
                   </div>
                 </div>
@@ -293,36 +302,41 @@ export default function ChatPage() {
         ) : (
           /* History tab */
           conversations.length === 0 ? (
-            <div className="soft-card p-4 text-sm leading-6 text-slate-500">
-              Once you ask the first question, your threads will appear here for quick revisits.
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <MessageSquareText className="h-8 w-8" style={{ color: 'var(--border)' }} />
+              <p className="mt-3 text-xs font-medium" style={{ color: 'var(--muted)' }}>No conversations yet</p>
+              <p className="mt-1 text-[10px] max-w-[180px] leading-4" style={{ color: 'var(--muted-soft)' }}>
+                Ask your first question and threads will appear here.
+              </p>
             </div>
           ) : (
-            conversations.map((conv) => (
-              <button
-                key={conv.id}
-                type="button"
-                onClick={() => loadConversation(conv.id)}
-                className={`mb-2 w-full rounded-[22px] p-4 text-left transition ${
-                  conversationId === conv.id
-                    ? 'bg-slate-950 text-white shadow-[0_18px_32px_rgba(15,23,42,0.18)]'
-                    : 'bg-white/80 text-slate-700 hover:bg-white'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${
-                    conversationId === conv.id ? 'bg-white/10 text-teal-300' : 'bg-teal-50 text-teal-700'
-                  }`}>
-                    <MessageSquareText className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{conv.title}</p>
-                    <p className={`mt-1 text-xs ${conversationId === conv.id ? 'text-slate-300' : 'text-slate-400'}`}>
-                      {conversationDate.format(new Date(conv.created_at))}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))
+            <div className="space-y-1.5">
+              {conversations.map((conv) => {
+                const active = conversationId === conv.id
+                return (
+                  <button key={conv.id} type="button" onClick={() => loadConversation(conv.id)}
+                    className="w-full rounded-xl p-3 text-left transition"
+                    style={{
+                      background: active ? 'linear-gradient(135deg, #0f172a, #1e293b)' : 'var(--surface)',
+                      border: active ? 'none' : '1px solid var(--border)',
+                      boxShadow: active ? '0 8px 24px rgba(15,23,42,0.15)' : 'none',
+                    }}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+                        style={{ background: active ? 'rgba(255,255,255,0.1)' : 'var(--teal-soft)' }}>
+                        <MessageSquareText className="h-3.5 w-3.5" style={{ color: active ? '#5eead4' : 'var(--teal)' }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold" style={{ color: active ? 'white' : 'var(--text)' }}>{conv.title}</p>
+                        <p className="mt-0.5 text-[10px]" style={{ color: active ? 'rgba(255,255,255,0.5)' : 'var(--muted-soft)' }}>
+                          {conversationDate.format(new Date(conv.created_at))}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           )
         )}
       </div>
@@ -460,81 +474,77 @@ export default function ChatPage() {
         </aside>
 
         <section className="premium-card chat-panel h-full flex flex-col">
-          <header className="border-b px-4 py-4 sm:px-6" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSidebarOpen(true)}
-                  className="grid h-11 w-11 place-items-center rounded-2xl border lg:hidden"
-                  style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--muted)' }}
-                >
-                  <Menu className="h-5 w-5" />
+          {/* ── Compact Header ── */}
+          <header className="px-4 py-3 sm:px-5" style={{ borderBottom: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between gap-2">
+              {/* Left: menu + doc info */}
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <button type="button" onClick={() => setSidebarOpen(true)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border lg:hidden"
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--muted)' }}>
+                  <Menu className="h-4 w-4" />
                 </button>
-                <div className="icon-shell h-12 w-12 shrink-0">
-                  {document?.source_type === 'website' ? <Globe className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--muted-soft)' }}>
-                    {document?.source_type === 'website' ? 'Website chat' : 'Document chat'}
-                  </p>
-                  <h1 className="truncate text-lg font-semibold sm:text-xl" style={{ color: 'var(--text)' }}>{document?.original_filename}</h1>
-                  <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
-                    {document?.source_type === 'website'
-                      ? `${document?.page_count ? `${document.page_count} pages crawled` : 'Pages pending'}`
-                      : `${document?.page_count ? `${document.page_count} pages` : 'Page count pending'}`}
-                  </p>
-                  {document?.source_type === 'website' && document?.source_url && (
-                    <p className="truncate text-xs" style={{ color: 'var(--muted-soft)' }}>{document.source_url}</p>
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: 'var(--teal-soft)' }}>
+                  {document?.source_type === 'website' ? (
+                    <ChatFavicon url={document?.source_url} favicon={document?.favicon_url} />
+                  ) : (
+                    <FileText className="h-4 w-4" style={{ color: 'var(--teal)' }} />
                   )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-sm font-bold leading-5" style={{ color: 'var(--text)', maxWidth: '100%' }}>
+                    {document?.original_filename}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] font-medium" style={{ color: 'var(--muted-soft)' }}>
+                      {document?.source_type === 'website'
+                        ? `${document?.page_count || 0} pages`
+                        : `${document?.page_count || 0} pg`}
+                    </span>
+                    {document?.persona?.name && document.persona.name !== 'Document Reader' && (
+                      <span className="rounded-md px-1.5 py-0.5 text-[9px] font-bold" style={{ background: 'var(--teal-soft)', color: 'var(--teal)' }}>
+                        {document.persona.name}
+                      </span>
+                    )}
+                    <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold ${document?.status === 'ready' ? '' : 'opacity-60'}`}
+                      style={{ background: document?.status === 'ready' ? '#10b98115' : 'var(--border)', color: document?.status === 'ready' ? '#10b981' : 'var(--muted-soft)' }}>
+                      {document?.status === 'ready' ? 'Ready' : document?.status}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Status badges */}
-                <div className="hidden sm:flex items-center gap-2">
-                  {document?.persona?.name && document.persona.name !== 'Document Reader' && (
-                    <span className="status-pill" style={{ background: 'var(--teal-soft)', color: 'var(--teal)' }}>
-                      {document.persona.name}
-                    </span>
+              {/* Right: action toolbar */}
+              <div className="flex items-center rounded-xl border p-0.5 gap-0.5 shrink-0" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+                <button type="button" onClick={handleShare} disabled={!conversationId || messages.length === 0}
+                  className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-white/60 disabled:opacity-30" style={{ color: 'var(--muted)' }}
+                  title="Share">
+                  <Link2 className="h-3 w-3" />
+                </button>
+                <button type="button" onClick={() => setPersonaOpen(true)}
+                  className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-white/60" style={{ color: 'var(--muted)' }}
+                  title="Persona">
+                  <UserCog className="h-3 w-3" />
+                </button>
+                <div className="relative">
+                  <button type="button" onClick={() => setExportOpen(!exportOpen)} disabled={!conversationId || messages.length === 0}
+                    className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-white/60 disabled:opacity-30" style={{ color: 'var(--muted)' }}
+                    title="Export">
+                    <Download className="h-3 w-3" />
+                  </button>
+                  {exportOpen && (
+                    <>
+                      <button type="button" className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
+                      <div className="absolute right-0 top-full z-20 mt-1.5 w-36 rounded-xl border p-1 shadow-xl" style={{ borderColor: 'var(--border)', background: 'var(--surface-strong)' }}>
+                        <button onClick={() => handleExport('md')} className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-medium transition hover:bg-white/60" style={{ color: 'var(--text)' }}>
+                          Markdown
+                        </button>
+                        <button onClick={() => handleExport('json')} className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-medium transition hover:bg-white/60" style={{ color: 'var(--text)' }}>
+                          JSON
+                        </button>
+                      </div>
+                    </>
                   )}
-                  <span className={`status-pill ${document?.status === 'ready' ? 'status-ready' : 'status-processing'}`}>
-                    {document?.status === 'ready' ? 'Ready' : document?.status}
-                  </span>
-                </div>
-
-                {/* Action toolbar — grouped in a pill */}
-                <div className="flex items-center rounded-full border p-1 gap-0.5" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
-                  <button type="button" onClick={handleShare} disabled={!conversationId || messages.length === 0}
-                    className="grid h-8 w-8 place-items-center rounded-full transition disabled:opacity-30" style={{ color: 'var(--muted)' }}
-                    title="Share conversation">
-                    <Link2 className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" onClick={() => setPersonaOpen(true)}
-                    className="grid h-8 w-8 place-items-center rounded-full transition" style={{ color: 'var(--muted)' }}
-                    title="AI Persona">
-                    <UserCog className="h-3.5 w-3.5" />
-                  </button>
-                  <div className="relative">
-                    <button type="button" onClick={() => setExportOpen(!exportOpen)} disabled={!conversationId || messages.length === 0}
-                      className="grid h-8 w-8 place-items-center rounded-full transition disabled:opacity-30" style={{ color: 'var(--muted)' }}
-                      title="Export conversation">
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                    {exportOpen && (
-                      <>
-                        <button type="button" className="fixed inset-0 z-10" onClick={() => setExportOpen(false)} />
-                        <div className="absolute right-0 top-full z-20 mt-2 w-40 rounded-2xl border p-2 shadow-xl" style={{ borderColor: 'var(--border)', background: 'var(--surface-strong)' }}>
-                          <button onClick={() => handleExport('md')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition hover:opacity-80" style={{ color: 'var(--text)' }}>
-                            Markdown (.md)
-                          </button>
-                          <button onClick={() => handleExport('json')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition hover:opacity-80" style={{ color: 'var(--text)' }}>
-                            JSON (.json)
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
               </div>
             </div>
@@ -542,54 +552,48 @@ export default function ChatPage() {
 
           <div className="chat-scroll flex-1 px-4 py-5 sm:px-6">
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <div className="icon-shell h-16 w-16">
-                  <Sparkles className="h-6 w-6" />
+              <div className="flex h-full flex-col items-center justify-center text-center px-4">
+                <div className="grid h-14 w-14 place-items-center rounded-2xl" style={{ background: 'var(--teal-soft)' }}>
+                  <Sparkles className="h-6 w-6" style={{ color: 'var(--teal)' }} />
                 </div>
-                <h2 className="mt-6 font-display text-3xl text-slate-950">
+                <h2 className="mt-5 font-display text-xl sm:text-2xl" style={{ color: 'var(--text)' }}>
                   {document?.source_type === 'website' ? 'Ask about this website' : 'Ask about this document'}
                 </h2>
 
                 {/* Auto-generated summary */}
                 {document?.auto_summary && (
-                  <div className="mt-5 max-w-2xl w-full">
-                    <div className="soft-card p-5 text-left">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">Summary</p>
-                      <p className="text-sm leading-7 text-slate-700">{document.auto_summary}</p>
+                  <div className="mt-4 max-w-xl w-full">
+                    <div className="soft-card p-4 text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: 'var(--muted-soft)' }}>Summary</p>
+                      <p className="text-xs leading-6" style={{ color: 'var(--muted)' }}>{document.auto_summary}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Auto-generated FAQ */}
                 {document?.auto_faq?.length > 0 ? (
-                  <div className="mt-5 grid w-full max-w-2xl gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 text-left">Suggested questions</p>
+                  <div className="mt-4 grid w-full max-w-xl gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-left" style={{ color: 'var(--muted-soft)' }}>Suggested questions</p>
                     {document.auto_faq.map((item, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => submitMessage(item.q)}
-                        className="soft-card px-5 py-3 text-left text-sm font-medium leading-6 text-slate-700 hover:-translate-y-0.5 hover:text-slate-950"
-                      >
+                      <button key={i} type="button" onClick={() => submitMessage(item.q)}
+                        className="rounded-xl border px-4 py-3 text-left text-xs font-medium leading-5 transition hover:-translate-y-0.5"
+                        style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: 'var(--surface)' }}>
                         {item.q}
                       </button>
                     ))}
                   </div>
                 ) : (
                   <>
-                    <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+                    <p className="mt-2 max-w-md text-xs leading-6 sm:text-sm" style={{ color: 'var(--muted-soft)' }}>
                       {document?.source_type === 'website'
                         ? 'Ask about any page, topic, or detail from the crawled website.'
-                        : 'Start with a summary, key risks, next steps, or any detail you want surfaced from the PDF.'}
+                        : 'Start with a summary, key risks, next steps, or any detail you want.'}
                     </p>
-                    <div className="mt-8 grid w-full max-w-2xl gap-3">
+                    <div className="mt-5 grid w-full max-w-md gap-2">
                       {(document?.source_type === 'website' ? websitePromptIdeas : pdfPromptIdeas).map((idea) => (
-                        <button
-                          key={idea}
-                          type="button"
-                          onClick={() => setInput(idea)}
-                          className="soft-card px-5 py-4 text-left text-sm font-medium leading-6 text-slate-700 hover:-translate-y-0.5 hover:text-slate-950"
-                        >
+                        <button key={idea} type="button" onClick={() => setInput(idea)}
+                          className="rounded-xl border px-4 py-3 text-left text-xs font-medium leading-5 transition hover:-translate-y-0.5"
+                          style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: 'var(--surface)' }}>
                           {idea}
                         </button>
                       ))}
@@ -598,7 +602,7 @@ export default function ChatPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {messages.map((msg, index) => (
                   <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.role === 'assistant' ? (
@@ -609,10 +613,11 @@ export default function ChatPage() {
                         isSpeaking={isSpeaking && index === messages.length - 1}
                         pendingLabel="Reading the document"
                         onBookmark={(isAdding) => handleBookmark(msg.content, isAdding)}
-                        onPageClick={document?.source_type !== 'website' ? (pageNum) => setPageViewerState({ pageNum }) : undefined}
+                        onPageClick={document?.source_type !== 'website' ? (pageNum, quote) => setPageViewerState({ pageNum, highlightText: quote }) : undefined}
                       />
                     ) : (
-                      <div className="max-w-[88%] rounded-[24px] bg-[linear-gradient(135deg,#0f172a,#1f2937)] px-5 py-4 text-sm leading-7 text-white shadow-[0_22px_38px_rgba(15,23,42,0.18)] sm:max-w-[72%]">
+                      <div className="max-w-[90%] rounded-2xl rounded-tr-lg px-4 py-3 text-sm leading-7 text-white sm:max-w-[75%]"
+                        style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', boxShadow: '0 8px 24px rgba(15,23,42,0.15)' }}>
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       </div>
                     )}
@@ -662,6 +667,7 @@ export default function ChatPage() {
           documentId={documentId}
           pageNum={pageViewerState.pageNum}
           totalPages={document?.page_count}
+          highlightText={pageViewerState.highlightText}
           onClose={() => setPageViewerState(null)}
           onPageChange={(num) => setPageViewerState({ pageNum: num })}
         />

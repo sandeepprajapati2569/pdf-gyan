@@ -262,7 +262,7 @@ CRITICAL RULES — follow these exactly:
 3. You MUST include ALL content from the document that is relevant to the question. Do not skip, summarize, or omit any relevant detail.
 4. NEVER add your own commentary, interpretation, opinion, analysis, or conclusion. No sentences like "This shows...", "Overall...", "In summary...", "These highlight...", "This demonstrates...".
 5. Organize the document content using markdown (## headers, ### subheaders, **bold**, bullet points) to make it readable and well-structured, but the content itself must be the exact document text.
-6. When page numbers are available (e.g., "--- Page 2 ---"), ALWAYS include page references in the format [Page X] at the end of relevant sentences or paragraphs. For example: "The revenue grew by 15% year over year. [Page 3]"
+6. When page numbers are available (e.g., "--- Page 2 ---"), ALWAYS include page references with a short quote in the format [Page X: "short exact quote"] at the end of relevant sentences. The quote should be 5-15 words copied exactly from the document. For example: "The revenue grew by 15% year over year. [Page 3: \"revenue grew by 15% year over year\"]"
 7. If the document does not contain relevant information for the question, say exactly: "This information is not found in the document."
 8. Your response must end with the last piece of document content. Do NOT add a closing summary or commentary paragraph."""
 

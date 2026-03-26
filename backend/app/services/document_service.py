@@ -79,6 +79,18 @@ async def process_document(db: AsyncIOMotorDatabase, doc_id: str, user: dict):
         except Exception as e:
             logger.warning(f"Auto-summary generation failed for {doc_id}: {e}")
 
+        # Dispatch webhook: document.processed
+        try:
+            from app.services.webhook_service import dispatch_event
+            await dispatch_event(db, user["_id"], "document.processed", {
+                "document_id": doc_id,
+                "name": doc.get("original_filename", ""),
+                "status": "ready",
+                "page_count": doc.get("page_count", 0),
+            })
+        except Exception:
+            pass
+
     except Exception as e:
         await db.documents.update_one(
             {"_id": ObjectId(doc_id)},
@@ -89,6 +101,15 @@ async def process_document(db: AsyncIOMotorDatabase, doc_id: str, user: dict):
                 }
             },
         )
+        # Dispatch webhook: document.failed
+        try:
+            from app.services.webhook_service import dispatch_event
+            await dispatch_event(db, user["_id"], "document.failed", {
+                "document_id": doc_id,
+                "error": str(e)[:200],
+            })
+        except Exception:
+            pass
 
 
 async def get_user_documents(db: AsyncIOMotorDatabase, user_id: str) -> list:

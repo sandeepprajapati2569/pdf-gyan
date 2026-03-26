@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, BarChart3, Check, CheckCircle2, ChevronRight, Clock3,
+  AlertTriangle, BarChart3, Check, CheckCircle2, ChevronRight, Clock3, Eye,
   FileText, Files, FolderKanban, Globe, Loader2, MessageSquareText,
   Phone, Plus, RefreshCw, Settings2, Trash2, UploadCloud, X,
 } from 'lucide-react'
@@ -12,9 +12,30 @@ import client from '../api/client'
 import { useAuth } from '../context/useAuth'
 import { useCrawlProgress } from '../hooks/useCrawlProgress'
 import WebsitePagesModal from '../components/WebsitePagesModal'
+import FilePreviewModal from '../components/workspace/FilePreviewModal'
 import ShortcutsModal from '../components/ShortcutsModal'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import toast from 'react-hot-toast'
+
+function FaviconIcon({ url, favicon }) {
+  const [failed, setFailed] = useState(false)
+
+  // Build favicon URL: use stored favicon, or derive from Google service
+  const src = !failed && (favicon || (url ? `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=64` : null))
+
+  if (!src || failed) {
+    return <Globe className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className="h-4 w-4 shrink-0 rounded-sm object-contain"
+      onError={() => setFailed(true)}
+    />
+  )
+}
 
 const statusConfig = {
   processing: { icon: Clock3, label: 'Processing', chipClass: 'status-pill status-processing', accent: 'text-amber-700' },
@@ -34,6 +55,7 @@ export default function Dashboard() {
   const [crawling, setCrawling] = useState(false)
   const [crawlingDocId, setCrawlingDocId] = useState(null)
   const [pagesModalDoc, setPagesModalDoc] = useState(null)
+  const [previewDoc, setPreviewDoc] = useState(null) // {id, name, page_count}
   const [showAddSource, setShowAddSource] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -453,6 +475,7 @@ export default function Dashboard() {
                 onDelete={handleDelete}
                 onNavigate={(id) => navigate(`/chat/${id}`)}
                 onCall={(id) => navigate(`/call/${id}`)}
+                onPreview={(d) => setPreviewDoc({ id: d.id, name: d.original_filename, page_count: d.page_count })}
               />
             ))}
           </div>
@@ -480,10 +503,24 @@ export default function Dashboard() {
       )}
 
       {/* ─── Pages Modal ─────────────────────────────── */}
+      {previewDoc && (
+        <FilePreviewModal
+          fileId={previewDoc.id}
+          fileName={previewDoc.name}
+          fileType="pdf"
+          pageCount={previewDoc.page_count}
+          source="document"
+          onClose={() => setPreviewDoc(null)}
+          onChat={() => { setPreviewDoc(null); navigate(`/chat/${previewDoc.id}`) }}
+        />
+      )}
+
       {pagesModalDoc && (
         <WebsitePagesModal
           docId={pagesModalDoc.id}
           docName={pagesModalDoc.original_filename}
+          sourceUrl={pagesModalDoc.source_url}
+          faviconUrl={pagesModalDoc.favicon_url}
           onClose={() => setPagesModalDoc(null)}
           onIndexed={fetchDocs}
         />
@@ -496,14 +533,14 @@ export default function Dashboard() {
 
 
 /* ─── PDF Document Card ────────────────────────────────── */
-function DocCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavigate, onCall }) {
+function DocCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavigate, onCall, onPreview }) {
   const status = statusConfig[doc.status] || statusConfig.processing
   const StatusIcon = status.icon
   const isReady = doc.status === 'ready'
 
   return (
     <article
-      onClick={() => isReady && onNavigate(doc.id)}
+      onClick={() => isReady && onPreview?.(doc)}
       className={`premium-card animate-rise group overflow-hidden transition-all ${
         isReady ? 'cursor-pointer hover:-translate-y-1 hover:shadow-[var(--shadow-strong)]' : 'cursor-default'
       } ${isSelected ? 'border-teal-300/90 shadow-[0_24px_60px_rgba(15,118,110,0.14)]' : ''}`}
@@ -552,6 +589,11 @@ function DocCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavigate,
         {/* Actions */}
         {isReady && (
           <div className="mt-3 flex items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onPreview?.(doc) }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-slate-50"
+              style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+              <Eye className="h-3 w-3" /> View
+            </button>
             <button type="button" onClick={(e) => { e.stopPropagation(); onNavigate(doc.id) }}
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-[var(--teal-soft)]"
               style={{ borderColor: 'var(--border)', color: 'var(--teal)' }}>
@@ -613,7 +655,7 @@ function WebsiteCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavig
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+              <FaviconIcon url={doc.source_url} favicon={doc.favicon_url} />
               <p className="truncate text-sm font-bold" style={{ color: 'var(--text)' }}>{doc.original_filename}</p>
             </div>
             {doc.source_url && (

@@ -95,6 +95,58 @@ def _detect_file_type(filename: str) -> str | None:
     }.get(ext)
 
 
+def _extract_tables_from_pdf(file_path: str) -> list[dict]:
+    """Extract structured tables from PDF using pdfplumber."""
+    tables = []
+    try:
+        import pdfplumber
+        with pdfplumber.open(file_path) as pdf:
+            for page_num, page in enumerate(pdf.pages[:50], 1):  # Limit to 50 pages
+                page_tables = page.extract_tables()
+                for t_idx, table in enumerate(page_tables):
+                    if not table or len(table) < 2:
+                        continue
+                    # First row as headers
+                    headers = [str(c or "").strip() for c in table[0]]
+                    rows = []
+                    for row in table[1:]:
+                        cells = [str(c or "").strip() for c in row]
+                        if any(cells):
+                            rows.append(cells)
+                    if headers and rows:
+                        tables.append({
+                            "page": page_num,
+                            "index": t_idx,
+                            "headers": headers,
+                            "rows": rows[:200],  # limit rows
+                            "row_count": len(rows),
+                            "col_count": len(headers),
+                        })
+    except Exception as e:
+        logger.warning(f"PDF table extraction failed: {e}")
+    return tables
+
+
+def _tables_to_markdown(tables: list[dict]) -> str:
+    """Convert extracted tables to markdown format for LLM context."""
+    if not tables:
+        return ""
+    parts = ["\n\n## Extracted Tables\n"]
+    for t in tables[:20]:  # Limit to 20 tables
+        parts.append(f"\n### Table (Page {t['page']})")
+        # Header row
+        parts.append("| " + " | ".join(t["headers"]) + " |")
+        parts.append("| " + " | ".join("---" for _ in t["headers"]) + " |")
+        # Data rows (limit to 50 for context)
+        for row in t["rows"][:50]:
+            # Pad or trim to match header count
+            padded = (row + [""] * len(t["headers"]))[:len(t["headers"])]
+            parts.append("| " + " | ".join(padded) + " |")
+        if t["row_count"] > 50:
+            parts.append(f"\n*...{t['row_count'] - 50} more rows*")
+    return "\n".join(parts)
+
+
 def _extract_text(file_path: str, file_type: str) -> str:
     try:
         if file_type == "pdf":
@@ -106,6 +158,14 @@ def _extract_text(file_path: str, file_type: str) -> str:
                 if len(text) > MAX_TEXT_CHARS:
                     break
             doc.close()
+            text = text[:MAX_TEXT_CHARS]
+
+            # Also extract tables and append as markdown
+            tables = _extract_tables_from_pdf(file_path)
+            if tables:
+                table_md = _tables_to_markdown(tables)
+                text = text + table_md
+
             return text[:MAX_TEXT_CHARS]
 
         elif file_type == "xlsx":
@@ -115,10 +175,22 @@ def _extract_text(file_path: str, file_type: str) -> str:
             for sheet in wb.sheetnames:
                 ws = wb[sheet]
                 parts.append(f"## Sheet: {sheet}")
-                for row in ws.iter_rows(values_only=True):
+                rows_data = []
+                headers = None
+                for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
                     cells = [str(c) if c is not None else "" for c in row]
-                    if any(cells):
-                        parts.append(" | ".join(cells))
+                    if not any(cells):
+                        continue
+                    if row_idx == 0:
+                        headers = cells
+                        # Create markdown table header
+                        parts.append("| " + " | ".join(cells) + " |")
+                        parts.append("| " + " | ".join("---" for _ in cells) + " |")
+                    else:
+                        padded = (cells + [""] * len(headers or []))[:len(headers or cells)]
+                        parts.append("| " + " | ".join(padded) + " |")
+                    if len("\n".join(parts)) > MAX_TEXT_CHARS:
+                        break
                 if len("\n".join(parts)) > MAX_TEXT_CHARS:
                     break
             wb.close()
@@ -133,6 +205,15 @@ def _extract_text(file_path: str, file_type: str) -> str:
                 for shape in slide.shapes:
                     if hasattr(shape, "text") and shape.text.strip():
                         parts.append(shape.text.strip())
+                    # Extract tables from slides
+                    if shape.has_table:
+                        table = shape.table
+                        headers = [cell.text.strip() for cell in table.rows[0].cells]
+                        parts.append("| " + " | ".join(headers) + " |")
+                        parts.append("| " + " | ".join("---" for _ in headers) + " |")
+                        for row in table.rows[1:]:
+                            cells = [cell.text.strip() for cell in row.cells]
+                            parts.append("| " + " | ".join(cells) + " |")
                 if len("\n".join(parts)) > MAX_TEXT_CHARS:
                     break
             return "\n".join(parts)[:MAX_TEXT_CHARS]
@@ -140,7 +221,21 @@ def _extract_text(file_path: str, file_type: str) -> str:
         elif file_type == "docx":
             import docx
             doc = docx.Document(file_path)
-            parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            parts = []
+            # Extract paragraphs
+            for p in doc.paragraphs:
+                if p.text.strip():
+                    parts.append(p.text.strip())
+            # Extract tables
+            for t_idx, table in enumerate(doc.tables):
+                parts.append(f"\n### Table {t_idx + 1}")
+                for r_idx, row in enumerate(table.rows):
+                    cells = [cell.text.strip() for cell in row.cells]
+                    if r_idx == 0:
+                        parts.append("| " + " | ".join(cells) + " |")
+                        parts.append("| " + " | ".join("---" for _ in cells) + " |")
+                    else:
+                        parts.append("| " + " | ".join(cells) + " |")
             return "\n".join(parts)[:MAX_TEXT_CHARS]
 
         elif file_type == "txt":
@@ -159,9 +254,17 @@ def _extract_text(file_path: str, file_type: str) -> str:
 
 
 async def create_folder(db: AsyncIOMotorDatabase, user_id: str, name: str, parent_id: str = None, color: str = None) -> dict:
+    clean_name = name.strip()[:100]
+    # Check for duplicate folder name in the same parent
+    existing = await db.workspace_folders.find_one({
+        "user_id": user_id, "parent_id": parent_id, "name": clean_name,
+    })
+    if existing:
+        raise ValueError(f'A folder named "{clean_name}" already exists here')
+
     folder = {
         "user_id": user_id,
-        "name": name.strip()[:100],
+        "name": clean_name,
         "parent_id": parent_id,
         "color": color,
         "access_level": "workspace",
@@ -319,6 +422,13 @@ async def upload_workspace_file(
     if not file_type:
         raise ValueError(f"Unsupported file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
 
+    # Check for duplicate filename in the same folder
+    existing = await db.workspace_files.find_one({
+        "user_id": user_id, "folder_id": folder_id, "original_filename": original_filename,
+    })
+    if existing:
+        raise ValueError(f'A file named "{original_filename}" already exists in this folder')
+
     file_id = str(ObjectId())
     user_dir = os.path.join(settings.UPLOAD_DIR, user_id, "workspace")
     os.makedirs(user_dir, exist_ok=True)
@@ -332,6 +442,37 @@ async def upload_workspace_file(
 
     extracted_text = _extract_text(file_path, file_type)
     char_count = len(extracted_text)
+
+    # Extract structured tables for table intelligence (non-blocking — failures are silent)
+    parsed_tables = []
+    try:
+        if file_type == "pdf":
+            parsed_tables = _extract_tables_from_pdf(file_path)
+        elif file_type == "xlsx":
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            for sheet in wb.sheetnames[:10]:
+                ws = wb[sheet]
+                headers = None
+                data_rows = []
+                row_count = 0
+                for row in ws.iter_rows(values_only=True):
+                    cells = [str(c or "").strip() for c in row]
+                    if not any(cells):
+                        continue
+                    if headers is None:
+                        headers = cells
+                    else:
+                        data_rows.append(cells)
+                        row_count += 1
+                        if row_count >= 200:
+                            break
+                if headers and data_rows:
+                    parsed_tables.append({"page": 0, "index": 0, "headers": headers, "rows": data_rows, "row_count": len(data_rows), "col_count": len(headers), "sheet": sheet})
+            wb.close()
+    except Exception as e:
+        logger.warning(f"Table extraction failed for {file_type}: {e}")
+        parsed_tables = []
 
     page_count = None
     if file_type == "pdf":
@@ -353,6 +494,7 @@ async def upload_workspace_file(
         "extracted_text": extracted_text,
         "char_count": char_count,
         "page_count": page_count,
+        "parsed_tables": parsed_tables[:50],  # max 50 tables per file
         "folder_id": folder_id,
         "access_level": "workspace",
         "shared_with": [],

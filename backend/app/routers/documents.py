@@ -1,5 +1,5 @@
 import fitz
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, BackgroundTasks, Query
 from fastapi.responses import Response
 from app.dependencies import get_current_user, get_user_db
 from app.services.document_service import (
@@ -200,9 +200,10 @@ async def update_persona(
 async def get_page_image(
     doc_id: str,
     page_num: int,
+    highlight: str = Query(None, description="Text to highlight on the page"),
     current_user: dict = Depends(get_current_user),
 ):
-    """Render a PDF page as a PNG image."""
+    """Render a PDF page as a PNG image with optional text highlighting."""
     db = await get_user_db(current_user)
     doc = await get_document(db, doc_id, current_user["_id"])
     if not doc:
@@ -222,11 +223,27 @@ async def get_page_image(
             raise HTTPException(400, f"Page {page_num} not found (document has {len(pdf)} pages)")
 
         page = pdf[page_num - 1]  # 0-indexed
+
+        # Draw highlight rectangles if text is provided
+        if highlight and highlight.strip():
+            highlight_text = highlight.strip()[:200]  # limit search text length
+            rects = page.search_for(highlight_text)
+            if not rects and len(highlight_text) > 40:
+                # Try shorter snippet if full text not found
+                rects = page.search_for(highlight_text[:40])
+            for rect in rects:
+                # Yellow semi-transparent highlight
+                annot = page.add_highlight_annot(rect)
+                annot.set_colors(stroke=(1, 0.9, 0))  # yellow
+                annot.set_opacity(0.35)
+                annot.update()
+
         pix = page.get_pixmap(dpi=150)
         img_bytes = pix.tobytes("png")
         pdf.close()
 
-        return Response(content=img_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+        cache = "no-cache" if highlight else "public, max-age=3600"
+        return Response(content=img_bytes, media_type="image/png", headers={"Cache-Control": cache})
     except HTTPException:
         raise
     except Exception as e:
