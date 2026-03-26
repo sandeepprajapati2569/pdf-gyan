@@ -13,6 +13,7 @@ import toast from 'react-hot-toast'
 
 import { getSettings, getUsage, updateSettings } from '../api/settings'
 import { useAuth } from '../context/useAuth'
+import TeamPanel from '../components/TeamPanel'
 
 const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
 const DEFAULT_OLLAMA_MODEL = 'llama3.1:latest'
@@ -222,7 +223,7 @@ export default function Settings() {
       ? {
           icon: Database,
           title: 'Private workspace',
-          description: 'New uploads and chats use your MongoDB database with your own OpenAI key.',
+          description: 'New uploads and chats use your MongoDB database with your OpenAI account.',
           pillLabel: 'Private active',
           pillClass: 'status-pill status-ready',
         }
@@ -230,19 +231,37 @@ export default function Settings() {
         ? {
             icon: Bot,
             title: 'Local workspace',
-            description: 'New uploads and chats use your MongoDB database with Ollama running on your own machine.',
+            description: 'New uploads and chats use your MongoDB database with Ollama on your machine.',
             pillLabel: 'Local active',
             pillClass: 'status-pill status-ready',
           }
         : {
             icon: Globe,
             title: 'Public workspace',
-            description: 'Hosted storage and model usage stay managed for you so setup remains fast and low-friction.',
+            description: 'Hosted storage and model access stay managed so setup stays quick and low-friction.',
             pillLabel: 'Public active',
             pillClass: 'soft-pill bg-white/80 text-slate-600',
           }
 
   const CurrentModeIcon = currentModeMeta.icon
+  const currentModeSignals =
+    mode === 'private'
+      ? [
+          { label: 'OpenAI', value: hasKey ? 'Saved' : 'Missing' },
+          { label: 'MongoDB', value: hasPrivateMongodb ? 'Connected' : 'Missing' },
+          { label: 'Stack', value: 'Your cloud setup' },
+        ]
+      : mode === 'local'
+        ? [
+            { label: 'Ollama', value: hasOllamaConfig ? 'Configured' : 'Missing' },
+            { label: 'MongoDB', value: hasPrivateMongodb ? 'Connected' : 'Missing' },
+            { label: 'Stack', value: 'Runs on your machine' },
+          ]
+        : [
+            { label: 'Storage', value: 'Platform' },
+            { label: 'Model', value: 'Managed' },
+            { label: 'Setup', value: 'Fastest path' },
+          ]
   const canActivatePrivateMode = (hasKey || Boolean(openaiKey.trim())) && (hasPrivateMongodb || Boolean(mongodbUrl.trim()))
   const canActivateLocalMode =
     Boolean((ollamaBaseUrl || '').trim()) &&
@@ -267,13 +286,13 @@ export default function Settings() {
           <span className="eyebrow">Workspace controls</span>
           <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-3">
-              <h1 className="font-display text-4xl text-slate-950 sm:text-5xl">Settings</h1>
+              <h1 className="font-display text-4xl text-slate-950 sm:text-[3.4rem]">Modes & access</h1>
               <p className="max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-                Manage keys, pick where data lives, and choose whether answers run on the platform, your OpenAI stack,
-                or Ollama on your machine.
+                Manage keys, choose where data lives, and decide whether the workspace runs on the
+                platform, your OpenAI stack, or Ollama on your machine.
               </p>
             </div>
-            <div className="soft-card max-w-sm px-4 py-4">
+            <div className="soft-card max-w-md px-4 py-4">
               <div className="flex items-start gap-3">
                 <div className="icon-shell h-11 w-11 shrink-0">
                   <CurrentModeIcon className="h-5 w-5" />
@@ -285,6 +304,14 @@ export default function Settings() {
                 </div>
               </div>
               <span className={`${currentModeMeta.pillClass} mt-4`}>{currentModeMeta.pillLabel}</span>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {currentModeSignals.map((item) => (
+                  <div key={item.label} className="rounded-[18px] border border-white/60 bg-white/72 px-3 py-3">
+                    <p className="text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">{item.value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -296,7 +323,7 @@ export default function Settings() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Usage</p>
-              <h2 className="text-xl font-semibold text-slate-950">Last 30 days</h2>
+              <h2 className="text-xl font-semibold text-slate-950">Recent usage</h2>
             </div>
           </div>
 
@@ -659,6 +686,18 @@ export default function Settings() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Team Workspaces */}
+      <section className="mt-8">
+        <div className="mb-5 section-intro">
+          <span className="eyebrow">Collaboration</span>
+          <h2 className="font-display text-3xl text-slate-950">Team workspaces</h2>
+          <p className="max-w-2xl text-sm leading-6 text-slate-600">
+            Invite teammates, assign roles, and keep shared access tidy as the workspace grows.
+          </p>
+        </div>
+        <TeamPanel />
       </section>
     </div>
   )

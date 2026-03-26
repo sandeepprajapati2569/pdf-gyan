@@ -1,5 +1,6 @@
 import {
   AudioWaveform,
+  Loader2,
   Mic,
   MicOff,
   MessageSquareText,
@@ -23,9 +24,17 @@ export default function ChatComposer({
   onToggleTalkMode,
   onToggleListening,
   onStopSpeaking,
+  // Voice note props
+  voiceNoteRecording = false,
+  voiceNoteTranscribing = false,
+  onToggleVoiceNote,
 }) {
   const talkPlaceholder = isListening
     ? 'Listening... say your question naturally'
+    : voiceNoteRecording
+    ? 'Recording voice note... tap mic to stop'
+    : voiceNoteTranscribing
+    ? 'Transcribing your voice note...'
     : placeholder
 
   const talkToggleTitle = talkModeEnabled
@@ -37,20 +46,39 @@ export default function ChatComposer({
       : 'Spoken answers are ready.'
 
   return (
-    <div className="border-t border-slate-200/80 bg-white/55 px-4 py-3 sm:px-6">
+    <div className="border-t px-4 py-3 sm:px-6" style={{ borderColor: 'var(--border)', background: 'var(--surface-soft)' }}>
       <div className="chat-composer-stack">
         <form onSubmit={onSubmit} className="chat-composer-row chat-composer-row-compact">
           <input
             type="text"
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
-            placeholder={talkModeEnabled ? talkPlaceholder : placeholder}
-            className={`field-input ${talkModeEnabled ? 'chat-input-talk' : ''} ${isListening ? 'chat-input-listening' : ''}`}
-            disabled={streaming}
+            placeholder={talkModeEnabled ? talkPlaceholder : voiceNoteRecording ? 'Recording...' : voiceNoteTranscribing ? 'Transcribing...' : placeholder}
+            className={`field-input ${talkModeEnabled ? 'chat-input-talk' : ''} ${isListening ? 'chat-input-listening' : ''} ${voiceNoteRecording ? 'chat-input-listening' : ''}`}
+            disabled={streaming || voiceNoteTranscribing}
             title={talkModeEnabled ? 'Press Enter to send a typed message while talk mode is on' : undefined}
           />
 
           <div className="chat-composer-actions">
+            {/* Voice note button (when not in talk mode) */}
+            {!talkModeEnabled && onToggleVoiceNote && (
+              <button
+                type="button"
+                onClick={onToggleVoiceNote}
+                disabled={streaming || voiceNoteTranscribing}
+                title={voiceNoteRecording ? 'Stop recording' : 'Record voice note'}
+                className={`talk-mode-icon-btn ${voiceNoteRecording ? 'talk-mode-icon-btn-live' : ''}`}
+              >
+                {voiceNoteTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : voiceNoteRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onToggleTalkMode}
@@ -89,7 +117,7 @@ export default function ChatComposer({
             ) : null}
 
             {!talkModeEnabled ? (
-              <button type="submit" disabled={!input.trim() || streaming} className="btn-primary shrink-0 px-4 sm:px-5">
+              <button type="submit" disabled={!input.trim() || streaming || voiceNoteRecording || voiceNoteTranscribing} className="btn-primary shrink-0 px-4 sm:px-5">
                 {streaming ? (
                   <span className="chat-button-status">
                     <span className="chat-thinking-dots chat-thinking-dots-compact" aria-hidden="true">
@@ -125,6 +153,14 @@ export default function ChatComposer({
             ) : null}
           </div>
         ) : null}
+
+        {voiceNoteRecording && (
+          <div className="talk-mode-status-line talk-mode-status-line-compact">
+            <span className="talk-mode-chip talk-mode-chip-live">
+              Recording voice note
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

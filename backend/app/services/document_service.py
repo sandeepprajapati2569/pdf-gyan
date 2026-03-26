@@ -1,11 +1,15 @@
 import os
+import json
 import uuid
+import logging
 import fitz  # PyMuPDF
 from datetime import datetime, timezone
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.config import settings
 from app.services.llm_service import llm_service
+
+logger = logging.getLogger(__name__)
 
 
 async def upload_document(db: AsyncIOMotorDatabase, user_id: str, file_content: bytes, original_filename: str) -> dict:
@@ -68,6 +72,13 @@ async def process_document(db: AsyncIOMotorDatabase, doc_id: str, user: dict):
                 }
             },
         )
+
+        # Generate auto-summary + FAQ (non-blocking — doc is already "ready")
+        try:
+            await _generate_auto_summary(db, doc_id, user, doc)
+        except Exception as e:
+            logger.warning(f"Auto-summary generation failed for {doc_id}: {e}")
+
     except Exception as e:
         await db.documents.update_one(
             {"_id": ObjectId(doc_id)},
@@ -125,3 +136,78 @@ async def delete_document(db: AsyncIOMotorDatabase, doc_id: str, user_id: str) -
     await db.conversations.delete_many({"document_id": doc_id})
 
     return True
+
+
+async def _generate_auto_summary(db: AsyncIOMotorDatabase, doc_id: str, user: dict, doc: dict):
+    """Generate an executive summary + FAQ for a document after indexing."""
+    file_path = doc.get("file_path", "")
+    is_website = doc.get("source_type") == "website"
+
+    # Extract content sample (first ~8000 chars)
+    content = ""
+    try:
+        if is_website and file_path.endswith(".md"):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()[:8000]
+        elif file_path:
+            pdf_doc = fitz.open(file_path)
+            for page_num in range(min(len(pdf_doc), 10)):
+                text = pdf_doc[page_num].get_text()
+                content += text
+                if len(content) > 8000:
+                    break
+            pdf_doc.close()
+            content = content[:8000]
+    except Exception as e:
+        logger.warning(f"Failed to extract content for summary: {e}")
+        return
+
+    if not content or len(content) < 100:
+        return
+
+    doc_name = doc.get("original_filename", "Document")
+    prompt = f"""You are analyzing a document called "{doc_name}".
+
+Based on the content below, generate:
+1. An executive summary (3-5 sentences, clear and informative)
+2. A list of 5-8 frequently asked questions with concise answers
+
+Document content:
+{content}
+
+Respond in this exact JSON format:
+{{
+  "summary": "Your executive summary here...",
+  "faq": [
+    {{"q": "Question 1?", "a": "Answer 1."}},
+    {{"q": "Question 2?", "a": "Answer 2."}}
+  ]
+}}
+
+Only return valid JSON. No other text."""
+
+    try:
+        response = await llm_service.completion(
+            user=user,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = response.choices[0].message.content.strip()
+
+        # Parse JSON (handle markdown code blocks)
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        parsed = json.loads(text)
+
+        summary = parsed.get("summary", "")
+        faq = parsed.get("faq", [])
+
+        if summary:
+            await db.documents.update_one(
+                {"_id": ObjectId(doc_id)},
+                {"$set": {"auto_summary": summary, "auto_faq": faq}},
+            )
+            logger.info(f"Auto-summary generated for {doc_id}: {len(faq)} FAQs")
+    except Exception as e:
+        logger.warning(f"Auto-summary LLM call failed: {e}")

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from datetime import datetime, timezone
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import Response, StreamingResponse
 from app.dependencies import get_current_user, get_user_db
 from app.services.document_service import get_document_with_tree
@@ -11,7 +12,8 @@ from app.services.chat_service import (
 )
 from app.models.conversation import ChatRequest, MultiChatRequest, TtsRequest, ConversationResponse, ChatMessage
 from app.services.tts_service import TTSUnavailableError, create_openai_speech
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -36,6 +38,29 @@ async def create_tts_audio(
         media_type="audio/wav",
         headers={"Cache-Control": "no-store"},
     )
+
+
+class VoiceNoteRequest(BaseModel):
+    audio: str
+    format: str = "webm"
+
+
+@router.post("/voice-note")
+async def voice_note(
+    request: VoiceNoteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Transcribe a voice note to text using Whisper."""
+    from app.services.voice_call.stt_service import transcribe_audio
+    try:
+        text, latency_ms = await transcribe_audio(
+            user=current_user,
+            audio_base64=request.audio,
+            audio_format=request.format,
+        )
+        return {"text": text, "latency_ms": latency_ms}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
 
 # Static routes MUST come before parameterized routes
@@ -175,3 +200,56 @@ async def get_conv(
         "messages": conv.get("messages", []),
         "created_at": conv["created_at"],
     }
+
+
+@router.get("/conversation/{conversation_id}/export")
+async def export_conversation(
+    conversation_id: str,
+    format: str = Query("md", regex="^(md|json)$"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Export a conversation as Markdown or JSON."""
+    db = await get_user_db(current_user)
+    conv = await get_conversation(db, conversation_id, current_user["_id"])
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    title = conv.get("title", "Untitled")
+    messages = conv.get("messages", [])
+    created = conv.get("created_at", datetime.now(timezone.utc))
+
+    if format == "json":
+        import json
+        export_data = {
+            "title": title,
+            "created_at": created.isoformat() if hasattr(created, 'isoformat') else str(created),
+            "messages": [
+                {"role": m.get("role", ""), "content": m.get("content", "")}
+                for m in messages
+            ],
+        }
+        content = json.dumps(export_data, indent=2, ensure_ascii=False)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{title}.json"'},
+        )
+
+    # Markdown format
+    lines = [f"# {title}\n"]
+    lines.append(f"*Exported on {datetime.now(timezone.utc).strftime('%B %d, %Y')}*\n\n---\n")
+
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        if role == "user":
+            lines.append(f"\n## You\n\n{content}\n")
+        else:
+            lines.append(f"\n## AI Assistant\n\n{content}\n")
+
+    md_content = "\n".join(lines)
+    return Response(
+        content=md_content,
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{title}.md"'},
+    )

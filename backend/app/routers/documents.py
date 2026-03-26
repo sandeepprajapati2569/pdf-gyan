@@ -1,4 +1,6 @@
+import fitz
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, BackgroundTasks
+from fastapi.responses import Response
 from app.dependencies import get_current_user, get_user_db
 from app.services.document_service import (
     upload_document,
@@ -9,7 +11,9 @@ from app.services.document_service import (
 )
 from app.models.document import DocumentResponse, DocumentDetailResponse
 from app.config import settings
-from typing import List
+from bson import ObjectId
+from pydantic import BaseModel
+from typing import List, Optional
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -94,6 +98,9 @@ async def list_documents(current_user: dict = Depends(get_current_user)):
             status=doc["status"],
             page_count=doc.get("page_count"),
             error_message=doc.get("error_message"),
+            source_type=doc.get("source_type", "pdf"),
+            source_url=doc.get("source_url"),
+            tags=doc.get("tags", []),
             created_at=doc["created_at"],
         )
         for doc in docs
@@ -114,7 +121,12 @@ async def get_doc(doc_id: str, current_user: dict = Depends(get_current_user)):
         status=doc["status"],
         page_count=doc.get("page_count"),
         error_message=doc.get("error_message"),
+        source_type=doc.get("source_type", "pdf"),
+        source_url=doc.get("source_url"),
+        tags=doc.get("tags", []),
         has_index=doc["status"] == "ready",
+        auto_summary=doc.get("auto_summary"),
+        auto_faq=doc.get("auto_faq"),
         created_at=doc["created_at"],
     )
 
@@ -126,3 +138,96 @@ async def delete_doc(doc_id: str, current_user: dict = Depends(get_current_user)
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"message": "Document deleted"}
+
+
+class UpdateTagsRequest(BaseModel):
+    tags: list[str]
+
+
+@router.patch("/{doc_id}/tags")
+async def update_tags(
+    doc_id: str,
+    request: UpdateTagsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Update tags for a document."""
+    db = await get_user_db(current_user)
+    doc = await get_document(db, doc_id, current_user["_id"])
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Normalize tags
+    tags = list(set(t.strip().lower() for t in request.tags if t.strip()))[:20]
+
+    await db.documents.update_one(
+        {"_id": ObjectId(doc_id)},
+        {"$set": {"tags": tags}},
+    )
+    return {"tags": tags}
+
+
+class PersonaRequest(BaseModel):
+    name: str = "Document Reader"
+    tone: str = "neutral"  # neutral, formal, friendly, technical, casual
+    custom_instructions: str = ""
+
+
+@router.put("/{doc_id}/persona")
+async def update_persona(
+    doc_id: str,
+    request: PersonaRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Set custom AI persona for a document."""
+    db = await get_user_db(current_user)
+    doc = await get_document(db, doc_id, current_user["_id"])
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    persona = {
+        "name": request.name[:100],
+        "tone": request.tone,
+        "custom_instructions": request.custom_instructions[:500],
+    }
+    await db.documents.update_one(
+        {"_id": ObjectId(doc_id)},
+        {"$set": {"persona": persona}},
+    )
+    return {"persona": persona}
+
+
+@router.get("/{doc_id}/page/{page_num}")
+async def get_page_image(
+    doc_id: str,
+    page_num: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Render a PDF page as a PNG image."""
+    db = await get_user_db(current_user)
+    doc = await get_document(db, doc_id, current_user["_id"])
+    if not doc:
+        raise HTTPException(404, "Document not found")
+
+    if doc.get("source_type") == "website":
+        raise HTTPException(400, "Page images only available for PDF documents")
+
+    file_path = doc.get("file_path", "")
+    if not file_path or not file_path.endswith(".pdf"):
+        raise HTTPException(400, "No PDF file available")
+
+    try:
+        pdf = fitz.open(file_path)
+        if page_num < 1 or page_num > len(pdf):
+            pdf.close()
+            raise HTTPException(400, f"Page {page_num} not found (document has {len(pdf)} pages)")
+
+        page = pdf[page_num - 1]  # 0-indexed
+        pix = page.get_pixmap(dpi=150)
+        img_bytes = pix.tobytes("png")
+        pdf.close()
+
+        return Response(content=img_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to render page: {str(e)}")

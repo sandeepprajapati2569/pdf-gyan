@@ -85,6 +85,24 @@ def _extract_full_pdf_text(pdf_path: str) -> str:
         return ""
 
 
+def _extract_full_md_text(md_path: str) -> str:
+    """Extract all text from a markdown file (for website documents)."""
+    try:
+        with open(md_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Split by ## headers (each represents a crawled page)
+        import re as _re
+        sections = _re.split(r"^## ", content, flags=_re.MULTILINE)
+        parts = []
+        for i, section in enumerate(sections):
+            stripped = section.strip()
+            if stripped:
+                parts.append(f"--- Page {i} ---\n{stripped}")
+        return "\n\n".join(parts) if parts else content
+    except Exception:
+        return ""
+
+
 async def _tree_search(user, structure, message) -> list:
     """Use LLM to find relevant nodes in the document tree."""
     tree_without_text = _remove_fields(copy.deepcopy(structure), fields=["text"])
@@ -136,32 +154,39 @@ def _get_relevant_content_for_doc(document: dict, message: str = None) -> tuple:
 
 async def _extract_relevant_content(user, document, message) -> str:
     """Extract relevant content from a single document for RAG."""
-    page_count, pdf_path, raw_tree, structure = _get_relevant_content_for_doc(document)
+    page_count, file_path, raw_tree, structure = _get_relevant_content_for_doc(document)
+    is_website = document.get("source_type") == "website"
     relevant_content = ""
 
-    if page_count <= SMALL_DOC_PAGE_LIMIT and pdf_path:
-        relevant_content = _extract_full_pdf_text(pdf_path)
+    if page_count <= SMALL_DOC_PAGE_LIMIT and file_path:
+        if is_website:
+            relevant_content = _extract_full_md_text(file_path)
+        else:
+            relevant_content = _extract_full_pdf_text(file_path)
     elif structure:
         node_ids = await _tree_search(user, structure, message)
         node_map = _create_node_mapping(structure)
 
-        pages_to_extract = set()
-        for nid in node_ids:
-            node = node_map.get(nid)
-            if not node:
-                continue
-            start = node.get("start_index", 0)
-            end = node.get("end_index", start)
-            if start and end:
-                for p in range(start, end + 1):
-                    pages_to_extract.add(p)
+        # For PDFs: extract page ranges from the file
+        if not is_website:
+            pages_to_extract = set()
+            for nid in node_ids:
+                node = node_map.get(nid)
+                if not node:
+                    continue
+                start = node.get("start_index", 0)
+                end = node.get("end_index", start)
+                if start and end:
+                    for p in range(start, end + 1):
+                        pages_to_extract.add(p)
 
-        if pages_to_extract and pdf_path:
-            sorted_pages = sorted(pages_to_extract)
-            relevant_content = _extract_pdf_pages(
-                pdf_path, sorted_pages[0], sorted_pages[-1]
-            )
+            if pages_to_extract and file_path:
+                sorted_pages = sorted(pages_to_extract)
+                relevant_content = _extract_pdf_pages(
+                    file_path, sorted_pages[0], sorted_pages[-1]
+                )
 
+        # For both PDFs and websites: use node text as fallback/primary
         if not relevant_content:
             parts = []
             for nid in node_ids:
@@ -170,8 +195,11 @@ async def _extract_relevant_content(user, document, message) -> str:
                     parts.append(node["text"])
             relevant_content = "\n\n".join(parts)
 
-    if not relevant_content and pdf_path:
-        relevant_content = _extract_full_pdf_text(pdf_path)
+    if not relevant_content and file_path:
+        if is_website:
+            relevant_content = _extract_full_md_text(file_path)
+        else:
+            relevant_content = _extract_full_pdf_text(file_path)
 
     return relevant_content
 
@@ -215,8 +243,18 @@ async def chat_with_document(
 
     # Generate Answer
     doc_name = document.get("original_filename", "the document")
+    persona = document.get("persona") or {}
+    persona_name = persona.get("name", "a document reader")
+    persona_tone = persona.get("tone", "neutral")
+    persona_instructions = persona.get("custom_instructions", "")
 
-    system_prompt = f"""You are a document reader for "{doc_name}".
+    persona_intro = f'You are {persona_name} for "{doc_name}".'
+    if persona_tone != "neutral":
+        persona_intro += f" Respond in a {persona_tone} tone."
+    if persona_instructions:
+        persona_intro += f" {persona_instructions}"
+
+    system_prompt = f"""{persona_intro}
 
 CRITICAL RULES — follow these exactly:
 1. You are ONLY allowed to use text that appears in the document content below. You have ZERO outside knowledge. If something is not written in the document, you do not know it.
@@ -224,7 +262,7 @@ CRITICAL RULES — follow these exactly:
 3. You MUST include ALL content from the document that is relevant to the question. Do not skip, summarize, or omit any relevant detail.
 4. NEVER add your own commentary, interpretation, opinion, analysis, or conclusion. No sentences like "This shows...", "Overall...", "In summary...", "These highlight...", "This demonstrates...".
 5. Organize the document content using markdown (## headers, ### subheaders, **bold**, bullet points) to make it readable and well-structured, but the content itself must be the exact document text.
-6. When page numbers are available (e.g., "--- Page 2 ---"), reference them (e.g., "(Page 2)").
+6. When page numbers are available (e.g., "--- Page 2 ---"), ALWAYS include page references in the format [Page X] at the end of relevant sentences or paragraphs. For example: "The revenue grew by 15% year over year. [Page 3]"
 7. If the document does not contain relevant information for the question, say exactly: "This information is not found in the document."
 8. Your response must end with the last piece of document content. Do NOT add a closing summary or commentary paragraph."""
 

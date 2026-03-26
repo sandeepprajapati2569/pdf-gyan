@@ -3,63 +3,56 @@ import {
   ArrowRight,
   Bot,
   Braces,
+  Cpu,
   Database,
   FileStack,
+  Globe,
   MessageSquareQuote,
+  Phone,
   ShieldCheck,
   Sparkles,
   Workflow,
 } from 'lucide-react'
 import BrandMark from '../components/ui/BrandMark'
 
-const features = [
+const spotlightCards = [
   {
-    icon: MessageSquareQuote,
-    title: 'Answers that feel grounded',
-    description: 'Ask questions in plain language and get confident responses built from your uploaded PDFs.',
+    icon: Globe,
+    title: 'Crawl a live website into the workspace',
+    description: 'Turn docs centers, help pages, or marketing sites into a searchable source beside your PDFs.',
+  },
+  {
+    icon: Phone,
+    title: 'Switch from typing to voice',
+    description: 'Open call mode when a conversation is easier to speak through than type out line by line.',
   },
   {
     icon: Braces,
-    title: 'API-ready from day one',
-    description: 'Generate keys, call the REST API, and bring the same document intelligence into your own product.',
+    title: 'Ship the same flow in your product',
+    description: 'Generate keys, embed widgets, or call the API without rebuilding the workflow from scratch.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Secure workspace controls',
-    description: 'Keep access, workspace behavior, and data handling clear as your usage grows.',
-  },
-  {
-    icon: Workflow,
-    title: 'Multi-document reasoning',
-    description: 'Move past one-file-at-a-time workflows and ask questions across a selected set of documents.',
-  },
-  {
-    icon: Database,
-    title: 'No vector database required',
-    description: 'Leverage PageIndex for structured understanding instead of bolting on a more fragile search layer.',
-  },
-  {
-    icon: FileStack,
-    title: 'A workspace, not just a demo',
-    description: 'Manage uploads, monitor readiness, revisit conversations, and keep the entire flow organized.',
+    icon: Cpu,
+    title: 'Choose the stack that fits the team',
+    description: 'Run hosted, bring your own OpenAI stack, or move fully local with Ollama plus MongoDB.',
   },
 ]
 
 const steps = [
   {
     number: '01',
-    title: 'Upload and prepare',
-    text: 'Drop in a PDF and let the workspace prepare it for grounded answers and reusable history.',
+    title: 'Bring in a source',
+    text: 'Upload a PDF or crawl a website. The workspace prepares it and keeps the readiness state obvious.',
   },
   {
     number: '02',
-    title: 'Chat with context',
-    text: 'Start a new conversation, revisit old threads, or compare multiple documents side by side.',
+    title: 'Work through chat or voice',
+    text: 'Ask a focused question, compare documents, reopen history, or switch into call mode for a faster back-and-forth.',
   },
   {
     number: '03',
-    title: 'Ship it via API',
-    text: 'Use the same clean experience from your product by generating keys and integrating the API.',
+    title: 'Reuse the workflow anywhere',
+    text: 'Take the same experience into your app with API keys, shared conversations, and embeddable widgets.',
   },
 ]
 
@@ -67,17 +60,17 @@ const quickstartItems = [
   {
     icon: ShieldCheck,
     title: 'Create a workspace key',
-    text: 'Generate one key in settings and use it across uploads and chat requests.',
+    text: 'Generate one key and keep upload, chat, and widget calls behind the same clean auth layer.',
   },
   {
-    icon: FileStack,
-    title: 'Upload once',
-    text: 'Send the PDF, wait for ready status, and keep the document available for follow-up questions.',
+    icon: Database,
+    title: 'Send a source once',
+    text: 'Upload a PDF or crawl a website, then keep the indexed source ready for every follow-up question.',
   },
   {
-    icon: MessageSquareQuote,
-    title: 'Ask from your product',
-    text: 'Pass user questions through the chat flow and return grounded answers with less glue code.',
+    icon: Workflow,
+    title: 'Reply inside your product',
+    text: 'Pass the user question through the same grounded chat flow and return the answer where they already work.',
   },
 ]
 
@@ -85,38 +78,65 @@ const capabilityRailItems = [
   {
     icon: FileStack,
     label: 'Indexing flow',
-    title: 'Structured from the first upload',
-    description: 'Page-aware prep with clear ready states.',
+    title: 'PageIndex keeps structure intact',
+    description: 'Uploads move from processing to ready with a clear state the team can trust.',
   },
   {
     icon: MessageSquareQuote,
     label: 'Answer quality',
-    title: 'Responses that stay grounded',
-    description: 'Summaries and insights your team can trust.',
+    title: 'Chat stays anchored to the source',
+    description: 'Summaries, follow-ups, and comparisons keep the document context in view.',
   },
   {
-    icon: Braces,
+    icon: Cpu,
     label: 'Deployment mode',
-    title: 'One workflow for app and API',
-    description: 'Use the same flow in the UI and via REST.',
+    title: 'Hosted, private, or local',
+    description: 'Choose the model and storage path that fits your security and ops needs.',
   },
   {
     icon: Workflow,
     label: 'Multi-doc chat',
-    title: 'Compare more than one file at once',
-    description: 'Compare overlap and differences faster.',
+    title: 'Compare files side by side',
+    description: 'Ask for overlaps, differences, and repeated signals across more than one source.',
   },
   {
     icon: Bot,
     label: 'Conversation history',
-    title: 'Pick up where work stopped',
-    description: 'Reopen the last thread instantly.',
+    title: 'Return to the last working thread',
+    description: 'Pick up the same context without hunting through old screens.',
+  },
+  {
+    icon: Braces,
+    label: 'API support',
+    title: 'Built to move beyond the dashboard',
+    description: 'Use REST endpoints and widgets to extend the workflow into your own product.',
+  },
+]
+
+const modeCards = [
+  {
+    icon: Globe,
+    eyebrow: 'Fastest setup',
+    title: 'Public mode',
+    description: 'Use the hosted stack when you want the workspace live quickly and managed for you.',
+    bullets: ['Hosted storage', 'Platform-managed AI usage', 'Best for the quickest start'],
+    surfaceClass: 'premium-card',
   },
   {
     icon: ShieldCheck,
-    label: 'API support',
-    title: 'Built for product teams too',
-    description: 'Connect uploads and chat to your product.',
+    eyebrow: 'Bring your own stack',
+    title: 'Private mode',
+    description: 'Keep new uploads and conversations in your MongoDB while using your own OpenAI key.',
+    bullets: ['MongoDB in your control', 'Your OpenAI account', 'Clear separation for new data'],
+    surfaceClass: 'premium-card',
+  },
+  {
+    icon: Bot,
+    eyebrow: 'Fully local',
+    title: 'Local mode',
+    description: 'Run indexing and chat through Ollama on your machine while storing data in MongoDB.',
+    bullets: ['Ollama-powered chat', 'MongoDB storage', 'Good fit for local-first teams'],
+    surfaceClass: 'premium-card premium-card-dark text-slate-100',
   },
 ]
 
@@ -124,17 +144,17 @@ export default function Landing() {
   return (
     <div className="pb-12 sm:pb-20">
       <section className="page-shell max-w-7xl pb-8 pt-8 sm:pt-12">
-        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1.06fr)_minmax(420px,0.94fr)]">
+        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1.04fr)_minmax(420px,0.96fr)]">
           <div className="animate-rise space-y-7">
-            <span className="eyebrow">PDFs, clarified</span>
+            <span className="eyebrow">Knowledge that stays usable</span>
 
             <div className="space-y-5">
               <h1 className="font-display max-w-4xl text-5xl leading-[1.02] text-slate-950 sm:text-6xl xl:text-7xl">
-                Turn PDFs into answers your team can use.
+                Turn PDFs and websites into answers your team can use.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
-                Upload files, chat with context, compare documents, and bring the same workflow into
-                your product.
+                Upload files, crawl pages, chat with context, compare sources, and move the same
+                workflow into your product when you are ready.
               </p>
             </div>
 
@@ -149,6 +169,13 @@ export default function Landing() {
               </Link>
             </div>
 
+            <div className="flex flex-wrap gap-2">
+              {['PDF upload', 'Website crawl', 'Voice call', 'Embeddable widgets'].map((item) => (
+                <span key={item} className="soft-pill text-sm">
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
 
           <div className="premium-card animate-rise relative overflow-hidden p-5 sm:p-7" style={{ animationDelay: '120ms' }}>
@@ -161,12 +188,12 @@ export default function Landing() {
                   <BrandMark className="h-10 w-10 shrink-0" />
                   <div>
                     <p className="font-display text-sm text-slate-950">Live workspace</p>
-                    <p className="text-xs text-slate-500">Cleaner hierarchy, better flow</p>
+                    <p className="text-xs text-slate-500">One place for upload, chat, and handoff</p>
                   </div>
                 </div>
                 <span className="soft-pill">
                   <Bot className="h-4 w-4 text-teal-700" />
-                  AI grounded in your PDFs
+                  Ready for grounded answers
                 </span>
               </div>
 
@@ -178,20 +205,21 @@ export default function Landing() {
                     </div>
                     <div>
                       <p className="font-semibold text-slate-950">Quarterly Strategy Review.pdf</p>
-                      <p className="text-sm text-slate-500">Ready for chat · 42 pages</p>
+                      <p className="text-sm text-slate-500">Ready for chat and call · 42 pages</p>
                     </div>
                   </div>
                   <span className="status-pill status-ready">Ready</span>
                 </div>
 
                 <div className="mt-5 rounded-[24px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(244,251,250,0.82))] p-4 shadow-[0_20px_42px_rgba(15,23,42,0.08)]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Live conversation</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Live thread</p>
 
                   <div className="mt-4 flex justify-end">
                     <div className="max-w-[90%] rounded-[22px] bg-slate-950 px-5 py-4 text-slate-100 shadow-[0_20px_36px_rgba(15,23,42,0.18)]">
                       <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Question</p>
                       <p className="mt-3 text-sm leading-7 text-slate-200">
-                        What are the top three risks called out in this quarter&apos;s review?
+                        Where are the renewal risks showing up, and what should leadership watch
+                        first?
                       </p>
                     </div>
                   </div>
@@ -205,11 +233,11 @@ export default function Landing() {
                     <div className="flex-1 rounded-[22px] border border-teal-100 bg-teal-50/75 px-5 py-4">
                       <p className="text-xs uppercase tracking-[0.22em] text-teal-700">Answer preview</p>
                       <p className="mt-3 text-sm leading-7 text-slate-700">
-                        Margin pressure, supplier concentration, and delayed enterprise renewals show
-                        up repeatedly across the summary sections.
+                        The document flags delayed enterprise renewals, margin pressure in the mid-market,
+                        and supplier concentration as the three themes leadership should monitor first.
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {['3 risks surfaced', 'Summary-backed', 'Ready to continue'].map((tag) => (
+                        {['3 signals surfaced', 'Thread saved', 'Voice follow-up ready'].map((tag) => (
                           <span key={tag} className="soft-pill bg-white/80 text-slate-600">
                             {tag}
                           </span>
@@ -250,45 +278,45 @@ export default function Landing() {
       </section>
 
       <section className="page-shell max-w-7xl py-10">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="eyebrow">Designed like a real product</span>
-          <h2 className="font-display mt-5 text-4xl text-slate-950 sm:text-5xl">
-            Everything your document workflow needs.
+        <div className="section-intro">
+          <span className="eyebrow">What opens up next</span>
+          <h2 className="font-display text-4xl text-slate-950 sm:text-5xl">
+            The product keeps going after the first upload.
           </h2>
-          <p className="mt-4 text-lg leading-8 text-slate-600">
-            Focused surfaces, cleaner icons, sharper status states, and subtle motion make the
-            product feel deliberate from first click to final answer.
+          <p className="max-w-3xl text-lg leading-8 text-slate-600">
+            PDF Gyan is more than a chat box. It helps teams bring in websites, switch to voice,
+            share knowledge externally, and choose the model stack that matches how they work.
           </p>
         </div>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {features.map((feature, index) => (
+        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {spotlightCards.map((card, index) => (
             <article
-              key={feature.title}
+              key={card.title}
               className="premium-card animate-rise p-6"
               style={{ animationDelay: `${index * 90}ms` }}
             >
               <div className="icon-shell h-12 w-12">
-                <feature.icon className="h-5 w-5" />
+                <card.icon className="h-5 w-5" />
               </div>
-              <h3 className="mt-5 text-xl font-semibold text-slate-950">{feature.title}</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">{feature.description}</p>
+              <h3 className="mt-5 text-xl font-semibold text-slate-950">{card.title}</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{card.description}</p>
             </article>
           ))}
         </div>
       </section>
 
       <section className="page-shell max-w-7xl py-10">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.92fr)]">
           <div className="premium-card p-6 sm:p-8">
             <span className="eyebrow">How it flows</span>
             <div className="mt-5 space-y-5">
               <h2 className="font-display text-3xl text-slate-950 sm:text-4xl">
-                A simple flow from upload to answer.
+                A clean path from source to answer.
               </h2>
               <p className="max-w-2xl text-lg leading-8 text-slate-600">
-                Prepare the document, ask better questions, and put the workflow to work through the
-                API.
+                Keep the workflow understandable for the team, whether the answer stays in the
+                dashboard or ends up inside your own product.
               </p>
             </div>
 
@@ -300,7 +328,6 @@ export default function Landing() {
                   style={{ animationDelay: `${index * 120}ms` }}
                 >
                   <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-teal-500/80 via-sky-500/60 to-amber-400/70" />
-
                   <div className="flex items-start gap-4 sm:gap-5">
                     <div className="shrink-0 pt-0.5">
                       <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-2xl bg-slate-950 px-3 text-sm font-bold tracking-[0.18em] text-white shadow-[0_14px_24px_rgba(15,23,42,0.14)]">
@@ -317,14 +344,14 @@ export default function Landing() {
                   </div>
                 </article>
               ))}
-              </div>
+            </div>
           </div>
 
           <div className="premium-card premium-card-dark overflow-hidden p-6 text-slate-100 sm:p-8">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-slate-100">Developer quickstart</p>
-                <h3 className="mt-3 font-display text-2xl text-white">Ship it without extra glue</h3>
+                <h3 className="mt-3 font-display text-2xl text-white">Move from prototype to product</h3>
               </div>
               <div className="icon-shell h-12 w-12 border-white/10 bg-white/10 text-teal-300">
                 <Braces className="h-5 w-5" />
@@ -332,8 +359,8 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-sm leading-7 text-white">
-              Create a key, upload a document, and plug the same grounded workflow into your app with
-              a clean REST surface.
+              Create a key, send a source, and reuse the same grounded workflow in your app through
+              the REST API or embedded widgets.
             </p>
 
             <div className="mt-6 space-y-3">
@@ -375,44 +402,42 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="page-shell max-w-6xl py-10">
-        <div className="grid gap-5 md:grid-cols-2">
-          <article className="premium-card p-7">
-            <span className="soft-pill bg-white/70 text-teal-700">Start clean</span>
-            <h3 className="font-display mt-5 text-3xl text-slate-950">Starter</h3>
-            <p className="mt-2 text-slate-500">Best for individuals and lean product teams.</p>
-            <p className="mt-6 text-5xl font-semibold text-slate-950">
-              $0<span className="text-xl font-medium text-slate-400"> forever</span>
-            </p>
-            <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-600">
-              <li>Unlimited document uploads</li>
-              <li>Unlimited chat sessions</li>
-              <li>API access included</li>
-              <li>Self-serve workspace setup</li>
-            </ul>
-            <Link to="/register" className="btn-secondary mt-8 w-full justify-center">
-              Get started
-            </Link>
-          </article>
+      <section className="page-shell max-w-7xl py-10">
+        <div className="section-intro">
+          <span className="eyebrow">Run it your way</span>
+          <h2 className="font-display text-4xl text-slate-950 sm:text-5xl">
+            Pick the mode that matches your stack.
+          </h2>
+          <p className="max-w-3xl text-lg leading-8 text-slate-600">
+            Start hosted, bring your own OpenAI and MongoDB, or move fully local with Ollama when
+            the team needs tighter control.
+          </p>
+        </div>
 
-          <article className="premium-card relative overflow-hidden border-teal-200/60 bg-[linear-gradient(180deg,rgba(15,118,110,0.06),rgba(255,255,255,0.94))] p-7">
-            <div className="absolute right-5 top-5 rounded-full bg-teal-700 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white">
-              Popular
-            </div>
-            <span className="soft-pill bg-teal-50/80 text-teal-700">Managed usage</span>
-            <h3 className="font-display mt-5 text-3xl text-slate-950">Pro</h3>
-            <p className="mt-2 text-slate-500">Best for teams that want the platform to handle the stack.</p>
-            <p className="mt-6 text-5xl font-semibold text-slate-950">Pay as you go</p>
-            <ul className="mt-6 space-y-3 text-sm leading-7 text-slate-600">
-              <li>Everything in Free</li>
-              <li>Managed platform usage</li>
-              <li>Usage-based billing</li>
-              <li>Priority support</li>
-            </ul>
-            <Link to="/register" className="btn-primary mt-8 w-full justify-center">
-              Launch workspace
-            </Link>
-          </article>
+        <div className="mt-8 grid gap-5 md:grid-cols-3">
+          {modeCards.map((mode) => (
+            <article key={mode.title} className={`${mode.surfaceClass} p-7`}>
+              <span className={`soft-pill ${mode.title === 'Local mode' ? 'border-white/10 bg-white/10 text-white' : 'bg-white/70 text-teal-700'}`}>
+                {mode.eyebrow}
+              </span>
+              <div className="mt-5 flex items-center gap-3">
+                <div className={`icon-shell h-12 w-12 ${mode.title === 'Local mode' ? 'border-white/10 bg-white/10 text-teal-300' : ''}`}>
+                  <mode.icon className="h-5 w-5" />
+                </div>
+                <h3 className={`font-display text-3xl ${mode.title === 'Local mode' ? 'text-white' : 'text-slate-950'}`}>
+                  {mode.title}
+                </h3>
+              </div>
+              <p className={`mt-4 text-sm leading-7 ${mode.title === 'Local mode' ? 'text-slate-100' : 'text-slate-600'}`}>
+                {mode.description}
+              </p>
+              <ul className={`mt-6 space-y-3 text-sm leading-7 ${mode.title === 'Local mode' ? 'text-slate-100' : 'text-slate-600'}`}>
+                {mode.bullets.map((bullet) => (
+                  <li key={bullet}>{bullet}</li>
+                ))}
+              </ul>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -422,7 +447,7 @@ export default function Landing() {
             <BrandMark className="h-12 w-12 shrink-0" />
             <div>
               <p className="font-display text-xl text-slate-950">PDF Gyan</p>
-              <p className="text-sm text-slate-500">Built on PageIndex for cleaner document intelligence.</p>
+              <p className="text-sm text-slate-500">Built on PageIndex for grounded document intelligence.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3">

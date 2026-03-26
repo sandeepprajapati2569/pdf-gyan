@@ -56,7 +56,7 @@ export default function MultiChatPage() {
       setDocuments(docs.map((res) => res.data))
     } catch {
       toast.error('Failed to load documents')
-      navigate('/dashboard')
+      navigate('/documents')
     } finally {
       setLoading(false)
     }
@@ -97,7 +97,7 @@ export default function MultiChatPage() {
 
   useEffect(() => {
     if (docIds.length < 2) {
-      navigate('/dashboard')
+      navigate('/documents')
       return
     }
 
@@ -137,7 +137,7 @@ export default function MultiChatPage() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200/80 p-4">
         <div className="flex items-center justify-between gap-3">
-          <button type="button" onClick={() => navigate('/dashboard')} className="btn-ghost px-3 py-2 text-sm">
+          <button type="button" onClick={() => navigate('/documents')} className="btn-ghost px-3 py-2 text-sm">
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
@@ -289,6 +289,17 @@ export default function MultiChatPage() {
   ])
 
   submitMessageRef.current = submitMessage
+
+  // Auto-compare mode: if ?compare=true, auto-send comparison prompt
+  const compareMode = searchParams.get('compare') === 'true'
+  const autoCompareRef = useRef(false)
+  useEffect(() => {
+    if (compareMode && !autoCompareRef.current && documents.length >= 2 && messages.length === 0 && !streaming) {
+      autoCompareRef.current = true
+      const docNames = documents.map(d => d.original_filename).join(' and ')
+      submitMessage(`Compare ${docNames}. Create a structured comparison covering: key similarities, major differences, unique content in each document, and a recommendation summary.`)
+    }
+  }, [compareMode, documents, messages.length, streaming, submitMessage])
 
   const handleSend = async (event) => {
     event.preventDefault()

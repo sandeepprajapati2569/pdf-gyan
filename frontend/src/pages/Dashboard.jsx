@@ -2,63 +2,53 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  Clock3,
-  FileText,
-  Files,
-  FolderKanban,
-  Loader2,
-  MessageSquareText,
-  Trash2,
-  UploadCloud,
+  AlertTriangle, BarChart3, Check, CheckCircle2, ChevronRight, Clock3,
+  FileText, Files, FolderKanban, Globe, Loader2, MessageSquareText,
+  Phone, Plus, RefreshCw, Settings2, Trash2, UploadCloud, X,
 } from 'lucide-react'
 import { getDocuments, uploadDocument, deleteDocument } from '../api/documents'
+import { crawlWebsite } from '../api/websites'
+import client from '../api/client'
 import { useAuth } from '../context/useAuth'
+import { useCrawlProgress } from '../hooks/useCrawlProgress'
+import WebsitePagesModal from '../components/WebsitePagesModal'
+import ShortcutsModal from '../components/ShortcutsModal'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import toast from 'react-hot-toast'
 
 const statusConfig = {
-  processing: {
-    icon: Clock3,
-    label: 'Indexing',
-    chipClass: 'status-pill status-processing',
-    accent: 'text-amber-700',
-  },
-  ready: {
-    icon: CheckCircle2,
-    label: 'Ready to chat',
-    chipClass: 'status-pill status-ready',
-    accent: 'text-emerald-700',
-  },
-  failed: {
-    icon: AlertTriangle,
-    label: 'Needs attention',
-    chipClass: 'status-pill status-failed',
-    accent: 'text-red-700',
-  },
+  processing: { icon: Clock3, label: 'Processing', chipClass: 'status-pill status-processing', accent: 'text-amber-700' },
+  crawled:    { icon: CheckCircle2, label: 'Crawled', chipClass: 'status-pill status-processing', accent: 'text-amber-700' },
+  ready:      { icon: CheckCircle2, label: 'Ready to chat', chipClass: 'status-pill status-ready', accent: 'text-emerald-700' },
+  failed:     { icon: AlertTriangle, label: 'Needs attention', chipClass: 'status-pill status-failed', accent: 'text-red-700' },
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-})
+const dateFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' })
 
 export default function Dashboard() {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [selectedDocs, setSelectedDocs] = useState(new Set())
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [crawling, setCrawling] = useState(false)
+  const [crawlingDocId, setCrawlingDocId] = useState(null)
+  const [pagesModalDoc, setPagesModalDoc] = useState(null)
+  const [showAddSource, setShowAddSource] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const fetchDocs = useCallback(async ({ showLoader = false } = {}) => {
-    if (showLoader) {
-      setLoading(true)
-    }
+  // Keyboard shortcuts
+  const fileInputRef = document.querySelector('input[type="file"]')
+  const { showHelp, setShowHelp } = useKeyboardShortcuts({
+    onUpload: () => fileInputRef?.click(),
+  })
 
+  // Real-time crawl progress
+  const crawlProgress = useCrawlProgress(crawlingDocId, !!crawlingDocId)
+
+  const fetchDocs = useCallback(async ({ showLoader = false } = {}) => {
+    if (showLoader) setLoading(true)
     try {
       const res = await getDocuments()
       setDocuments(res.data)
@@ -71,34 +61,41 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDocs({ showLoader: true })
-    const interval = setInterval(() => {
-      fetchDocs()
-    }, 5000)
+    const interval = setInterval(() => fetchDocs(), 5000)
     return () => clearInterval(interval)
   }, [fetchDocs])
 
-  const onDrop = useCallback(
-    async (acceptedFiles) => {
-      const file = acceptedFiles[0]
-      if (!file) return
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        toast.error('Only PDF files are allowed')
-        return
-      }
-
-      setUploading(true)
-      try {
-        await uploadDocument(file)
-        toast.success('Document uploaded! Indexing has started.')
+  // Clear crawling state when progress completes
+  useEffect(() => {
+    if (crawlProgress.isComplete) {
+      setTimeout(() => {
+        setCrawlingDocId(null)
+        crawlProgress.reset()
         fetchDocs()
-      } catch (err) {
-        toast.error(err.response?.data?.detail || 'Upload failed')
-      } finally {
-        setUploading(false)
-      }
-    },
-    [fetchDocs],
-  )
+      }, 1500)
+    }
+  }, [crawlProgress.isComplete, fetchDocs, crawlProgress])
+
+  // ─── Handlers ──────────────────────────────────────
+
+  const onDrop = useCallback(async (acceptedFiles) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Only PDF files are allowed')
+      return
+    }
+    setUploading(true)
+    try {
+      await uploadDocument(file)
+      toast.success('Document uploaded! Indexing has started.')
+      fetchDocs()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }, [fetchDocs])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -106,243 +103,363 @@ export default function Dashboard() {
     maxFiles: 1,
   })
 
+  const handleCrawlWebsite = async (e) => {
+    e.preventDefault()
+    const url = websiteUrl.trim()
+    if (!url) return
+    setCrawling(true)
+    try {
+      const res = await crawlWebsite({ url })
+      const docId = res.data.id
+      setCrawlingDocId(docId)
+      setWebsiteUrl('')
+      toast.success('Crawl started!')
+      fetchDocs()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to start crawl')
+    } finally {
+      setCrawling(false)
+    }
+  }
+
   const handleDelete = async (id, event) => {
     event.stopPropagation()
-    if (!confirm('Delete this document and all its conversations?')) return
-
+    if (!confirm('Delete this and all its conversations?')) return
     try {
       await deleteDocument(id)
-      toast.success('Document deleted')
-      setDocuments((prev) => prev.filter((doc) => doc.id !== id))
-      setSelectedDocs((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
-    } catch {
-      toast.error('Failed to delete')
-    }
+      toast.success('Deleted')
+      setDocuments(prev => prev.filter(d => d.id !== id))
+      setSelectedDocs(prev => { const n = new Set(prev); n.delete(id); return n })
+    } catch { toast.error('Failed to delete') }
   }
 
   const toggleSelect = (id, event) => {
     event.stopPropagation()
-    setSelectedDocs((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
+    setSelectedDocs(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
     })
   }
 
-  const handleMultiChat = () => {
-    const ids = Array.from(selectedDocs).join(',')
-    navigate(`/chat/multi?docs=${ids}`)
+  const handleScheduleChange = async (docId, schedule) => {
+    try {
+      await client.put(`/api/websites/${docId}/schedule`, { schedule })
+      toast.success(schedule ? `Re-crawl set to ${schedule}` : 'Auto re-crawl disabled')
+      setDocuments(prev => prev.map(d => d.id === docId ? { ...d, recrawl_schedule: schedule } : d))
+    } catch { toast.error('Failed to update schedule') }
   }
 
-  const readyCount = documents.filter((doc) => doc.status === 'ready').length
+  const handleMultiChat = () => navigate(`/chat/multi?docs=${Array.from(selectedDocs).join(',')}&compare=true`)
+
+  // Tags & filtering
+  const [activeTag, setActiveTag] = useState(null)
+  const allTags = [...new Set(documents.flatMap(d => d.tags || []))]
+
+  // Split documents
+  const pdfDocsAll = documents.filter(d => d.source_type !== 'website')
+  const websiteDocsAll = documents.filter(d => d.source_type === 'website')
+  const pdfDocs = activeTag ? pdfDocsAll.filter(d => (d.tags || []).includes(activeTag)) : pdfDocsAll
+  const websiteDocs = activeTag ? websiteDocsAll.filter(d => (d.tags || []).includes(activeTag)) : websiteDocsAll
+  const readyCount = documents.filter(d => d.status === 'ready').length
   const selectedCount = selectedDocs.size
+  const totalSources = pdfDocsAll.length + websiteDocsAll.length
 
   return (
     <div className="page-shell max-w-7xl py-8 sm:py-10">
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <div className="premium-card p-6 sm:p-8">
-          <span className="eyebrow">Workspace overview</span>
-          <div className="mt-5 space-y-3">
-            <h1 className="font-display text-3xl leading-tight text-slate-950 sm:text-4xl">
-              Your documents, ready to work.
-            </h1>
-            <p className="max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              Upload PDFs, track readiness clearly, and open the right conversation as soon as each file is ready.
+
+      {/* ─── Header + Stats ──────────────────────────── */}
+      <section className="premium-card p-6 sm:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="font-display text-3xl leading-tight text-slate-950 sm:text-4xl">Documents</h1>
+            <p className="mt-2 max-w-xl text-base leading-7 text-slate-600">
+              Upload PDFs or crawl websites, then chat, call, or embed.
             </p>
           </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            {[
-              {
-                label: 'Total documents',
-                value: documents.length,
-                hint: user?.name ? `${user.name.split(' ')[0]}'s workspace` : 'Across your workspace',
-              },
-              {
-                label: 'Ready for chat',
-                value: readyCount,
-                hint: 'Instantly searchable',
-              },
-            ].map((item) => (
-              <div key={item.label} className="soft-card p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{item.value}</p>
-                <p className="mt-1 text-sm text-slate-500">{item.hint}</p>
-              </div>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddSource(true)}
+            className="btn-primary shrink-0"
+          >
+            <Plus className="h-4 w-4" /> Add Source
+          </button>
         </div>
 
-        <div
-          {...getRootProps()}
-          className={`premium-card cursor-pointer overflow-hidden p-6 sm:p-7 ${
-            isDragActive ? 'border-teal-300 bg-teal-50/65' : ''
-          }`}
-        >
-          <input {...getInputProps()} />
-          <div className="flex h-full flex-col justify-between gap-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Upload zone</p>
-                <h2 className="font-display mt-3 text-2xl text-slate-950">Add a new PDF</h2>
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Total', value: totalSources, color: 'var(--teal)' },
+            { label: 'Ready', value: readyCount, color: '#10b981' },
+            { label: 'PDFs', value: pdfDocsAll.length, color: '#6366f1' },
+            { label: 'Websites', value: websiteDocsAll.length, color: '#f59e0b' },
+          ].map(item => (
+            <div key={item.label} className="soft-card flex items-center gap-3 p-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl" style={{ background: `${item.color}15` }}>
+                <span className="text-lg font-bold" style={{ color: item.color }}>{item.value}</span>
               </div>
-              <div className={`icon-shell h-12 w-12 ${isDragActive ? 'bg-teal-100' : ''}`}>
-                {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />}
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</p>
             </div>
-
-            <div className="rounded-[24px] border border-dashed border-slate-300/90 bg-white/72 p-6 text-center">
-              <p className="text-lg font-semibold text-slate-950">
-                {uploading ? 'Uploading your document...' : isDragActive ? 'Drop your PDF here' : 'Drag, drop, or browse'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Upload a single PDF up to 50MB. Indexing starts automatically so it is ready for chat as soon as processing completes.
-              </p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      <section className="mt-8">
+      {/* ─── Add Source Modal ──────────────────────────── */}
+      {showAddSource && (
+        <div className="modal-overlay">
+          <button type="button" className="modal-backdrop" onClick={() => setShowAddSource(false)} />
+          <div className="premium-card modal-content w-full max-w-2xl p-0 overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-xl" style={{ color: 'var(--text)' }}>Add a new source</h2>
+                  <p className="mt-1 text-xs" style={{ color: 'var(--muted-soft)' }}>Choose how you want to bring knowledge into your workspace</p>
+                </div>
+                <button type="button" onClick={() => setShowAddSource(false)} className="btn-ghost !rounded-full !p-2">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-5 p-6 sm:grid-cols-2">
+              {/* PDF Upload */}
+              <div
+                {...getRootProps()}
+                className={`group rounded-2xl border p-6 cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg ${
+                  isDragActive ? 'border-teal-400 bg-teal-50/60 shadow-lg' : 'border-[var(--border)] hover:border-teal-300'
+                }`}
+                style={{ background: isDragActive ? undefined : 'var(--surface)' }}
+              >
+                <input {...getInputProps()} />
+                <div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: '#6366f115' }}>
+                  {uploading ? <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#6366f1' }} /> : <UploadCloud className="h-5 w-5" style={{ color: '#6366f1' }} />}
+                </div>
+                <h3 className="mt-4 text-sm font-bold" style={{ color: 'var(--text)' }}>
+                  {uploading ? 'Uploading...' : isDragActive ? 'Drop your PDF here' : 'Upload a PDF'}
+                </h3>
+                <p className="mt-1.5 text-xs leading-5" style={{ color: 'var(--muted)' }}>
+                  Drag and drop or click to browse. Supports files up to 50 MB. Indexing starts automatically.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {['Auto-indexed', 'Chat ready', 'Voice call'].map(tag => (
+                    <span key={tag} className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: '#6366f112', color: '#6366f1' }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Website Crawl */}
+              <div className="rounded-2xl border p-6 transition-all" style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}>
+                <div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: '#f59e0b15' }}>
+                  <Globe className="h-5 w-5" style={{ color: '#f59e0b' }} />
+                </div>
+                <h3 className="mt-4 text-sm font-bold" style={{ color: 'var(--text)' }}>Crawl a website</h3>
+                <p className="mt-1.5 text-xs leading-5" style={{ color: 'var(--muted)' }}>
+                  Enter a URL to crawl up to 2000 pages. We extract text and build a searchable index.
+                </p>
+                <form onSubmit={(e) => { handleCrawlWebsite(e); setShowAddSource(false) }} className="mt-4">
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: 'var(--muted-soft)' }} />
+                    <input
+                      type="url"
+                      value={websiteUrl}
+                      onChange={(e) => setWebsiteUrl(e.target.value)}
+                      placeholder="https://docs.example.com"
+                      required
+                      className="field-input !rounded-xl !pl-9 !text-xs"
+                    />
+                  </div>
+                  <button type="submit" disabled={crawling || !websiteUrl.trim()} className="btn-primary mt-3 w-full justify-center text-xs">
+                    {crawling ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting...</> : <><Globe className="h-3.5 w-3.5" /> Start Crawl</>}
+                  </button>
+                </form>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {['Auto-categorized', 'Incremental crawl', 'Re-crawl schedule'].map(tag => (
+                    <span key={tag} className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: '#f59e0b12', color: '#d97706' }}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Crawl Progress (shown inline when active) ── */}
+      {crawlingDocId && !crawlProgress.isComplete && (
+        <section className="mt-6">
+          <div className="premium-card overflow-hidden p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Crawling in progress</p>
+                <h2 className="font-display mt-1 text-xl text-slate-950">Website crawl</h2>
+              </div>
+              <div className="icon-shell h-12 w-12">
+                <Globe className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-teal-200/60 bg-teal-50/40 p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Loader2 className="h-4 w-4 animate-spin text-teal-700" />
+                <p className="text-sm font-semibold text-teal-800">
+                  {crawlProgress.phase === 'sitemap' ? 'Discovering pages from sitemap...' :
+                   crawlProgress.phase === 'bfs' ? 'Discovering pages via links...' :
+                   crawlProgress.currentUrl ? 'Crawling pages...' : 'Starting crawl...'}
+                </p>
+              </div>
+              {crawlProgress.totalUrls > 0 && (
+                <>
+                  <div className="w-full bg-teal-100 rounded-full h-2 mb-2">
+                    <div className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, (crawlProgress.pageNum / crawlProgress.totalUrls) * 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-teal-700 mb-2">
+                    {crawlProgress.pageNum} / {crawlProgress.totalUrls} pages
+                    {crawlProgress.pages.length > 0 && ` · ${crawlProgress.pages.length} extracted`}
+                  </p>
+                </>
+              )}
+              {crawlProgress.pages.length > 0 && (
+                <div className="mt-3 max-h-28 overflow-y-auto space-y-1">
+                  {crawlProgress.pages.slice(-5).map((p, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
+                      <CheckCircle2 className="h-3 w-3 text-teal-600 shrink-0" />
+                      <span className="truncate">{p.title || p.url}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ─── Tag Filter Bar ─────────────────────── */}
+      {allTags.length > 0 && (
+        <div className="mt-8 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: 'var(--muted-soft)' }}>Filter</span>
+          <button
+            type="button"
+            onClick={() => setActiveTag(null)}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              !activeTag ? 'border-[var(--teal)] bg-[var(--teal-soft)] text-[var(--teal)]' : 'border-[var(--border)] text-[var(--muted)]'
+            }`}
+          >
+            All
+          </button>
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                activeTag === tag ? 'border-[var(--teal)] bg-[var(--teal-soft)] text-[var(--teal)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--teal-soft)]'
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Websites Section (on top) ────────────────── */}
+      <section id="web-library" className="mt-8">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Library</p>
-            <h2 className="font-display mt-2 text-3xl text-slate-950">Your documents</h2>
+            <h2 className="font-display text-2xl text-slate-950 flex items-center gap-3">
+              <Globe className="h-6 w-6" style={{ color: '#f59e0b' }} /> Websites
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
+              Crawled sources ready for chat, voice, and embedding.
+            </p>
           </div>
-          {selectedCount > 0 && (
-            <div className="soft-card inline-flex items-center gap-2 px-4 py-3">
-              <Check className="h-4 w-4 text-teal-700" />
-              <span className="text-sm font-semibold text-slate-950">{selectedCount} selected</span>
-            </div>
-          )}
+          <div className="soft-card inline-flex items-center gap-2 px-3 py-2">
+            <Globe className="h-3.5 w-3.5" style={{ color: '#f59e0b' }} />
+            <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{websiteDocs.length} website{websiteDocs.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
 
         {loading ? (
-          <div className="premium-card flex min-h-[16rem] items-center justify-center">
+          <div className="premium-card flex min-h-[12rem] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-teal-700" />
           </div>
-        ) : documents.length === 0 ? (
-          <div className="premium-card flex min-h-[18rem] flex-col items-center justify-center px-6 text-center">
-            <div className="icon-shell h-16 w-16">
-              <FolderKanban className="h-7 w-7" />
-            </div>
-            <h3 className="mt-6 text-2xl font-semibold text-slate-950">No documents yet</h3>
-            <p className="mt-3 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
-              Your library will appear here after the first upload. Once a file is ready, you can open a chat instantly or select multiple files for comparison.
-            </p>
+        ) : websiteDocs.length === 0 ? (
+          <div className="premium-card flex min-h-[10rem] flex-col items-center justify-center px-6 text-center">
+            <Globe className="h-8 w-8" style={{ color: 'var(--muted-soft)' }} />
+            <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>No websites yet. Click <b>Add Source</b> to crawl one.</p>
           </div>
         ) : (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {documents.map((doc, index) => {
-              const status = statusConfig[doc.status] || statusConfig.processing
-              const StatusIcon = status.icon
-              const isSelected = selectedDocs.has(doc.id)
-
-              return (
-                <article
-                  key={doc.id}
-                  onClick={() => doc.status === 'ready' && navigate(`/chat/${doc.id}`)}
-                  className={`premium-card animate-rise group overflow-hidden p-5 ${
-                    doc.status === 'ready' ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'
-                  } ${isSelected ? 'border-teal-300/90 shadow-[0_24px_60px_rgba(15,118,110,0.14)]' : ''}`}
-                  style={{ animationDelay: `${index * 80}ms` }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      {doc.status === 'ready' ? (
-                        <button
-                          type="button"
-                          onClick={(event) => toggleSelect(doc.id, event)}
-                          className={`mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-2xl border ${
-                            isSelected
-                              ? 'border-teal-500 bg-teal-600 text-white'
-                              : 'border-slate-200 bg-white/90 text-slate-400'
-                          }`}
-                          aria-label={isSelected ? 'Deselect document' : 'Select document'}
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        <div className="icon-shell-warm mt-1 h-8 w-8 shrink-0">
-                          <StatusIcon className="h-4 w-4" />
-                        </div>
-                      )}
-
-                      <div className="icon-shell h-12 w-12 shrink-0">
-                        <FileText className="h-5 w-5" />
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-semibold text-slate-950">{doc.original_filename}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {doc.page_count ? `${doc.page_count} pages` : 'Page count pending'} · Added {dateFormatter.format(new Date(doc.created_at))}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(event) => handleDelete(doc.id, event)}
-                      className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-transparent bg-white/70 text-slate-400 hover:border-red-100 hover:bg-red-50 hover:text-red-600"
-                      aria-label="Delete document"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="mt-6 flex items-center justify-between gap-3">
-                    <span className={status.chipClass}>
-                      <StatusIcon className={`h-3.5 w-3.5 ${status.accent}`} />
-                      {status.label}
-                    </span>
-
-                    {doc.status === 'ready' ? (
-                      <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-900 transition group-hover:text-teal-700">
-                        Open chat
-                        <ChevronRight className="h-4 w-4" />
-                      </span>
-                    ) : (
-                      <span className="text-sm text-slate-500">Processing in background</span>
-                    )}
-                  </div>
-
-                  {doc.error_message && (
-                    <div className="mt-4 rounded-[20px] border border-red-100 bg-red-50/80 p-4">
-                      <p className="text-sm font-semibold text-red-700">Indexing issue</p>
-                      <p className="mt-1 text-sm leading-6 text-red-600">{doc.error_message}</p>
-                    </div>
-                  )}
-
-                  {doc.status === 'ready' && (
-                    <div className="mt-5 rounded-[20px] border border-slate-200/80 bg-white/72 p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[18px] border border-teal-100 bg-teal-50/90 text-teal-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
-                          <MessageSquareText className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-950">Start with one sharp question</p>
-                          <p className="mt-1 text-sm leading-6 text-slate-500">
-                            Ask for summaries, key decisions, risks, timelines, or anything else grounded in the PDF.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              )
-            })}
+            {websiteDocs.map((doc, index) => (
+              <WebsiteCard
+                key={doc.id}
+                doc={doc}
+                index={index}
+                isSelected={selectedDocs.has(doc.id)}
+                onToggleSelect={toggleSelect}
+                onDelete={handleDelete}
+                onNavigate={(id) => navigate(`/chat/${id}`)}
+                onCall={(id) => navigate(`/call/${id}`)}
+                onManagePages={(doc) => setPagesModalDoc(doc)}
+                onScheduleChange={handleScheduleChange}
+              />
+            ))}
           </div>
         )}
       </section>
 
+      {/* ─── PDF Documents Section ───────────────────── */}
+      <section id="documents-library" className="mt-10">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display text-2xl text-slate-950 flex items-center gap-3">
+              <FileText className="h-6 w-6" style={{ color: '#6366f1' }} /> PDF Documents
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
+              Uploaded PDFs ready for chat, voice, and comparison.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="soft-card inline-flex items-center gap-2 px-3 py-2">
+              <FileText className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
+              <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{pdfDocs.length} document{pdfDocs.length !== 1 ? 's' : ''}</span>
+            </div>
+            {selectedCount > 0 && (
+              <div className="soft-card inline-flex items-center gap-2 px-3 py-2">
+                <Check className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
+                <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{selectedCount} selected</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="premium-card flex min-h-[12rem] items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-teal-700" />
+          </div>
+        ) : pdfDocs.length === 0 ? (
+          <div className="premium-card flex min-h-[10rem] flex-col items-center justify-center px-6 text-center">
+            <FileText className="h-8 w-8" style={{ color: 'var(--muted-soft)' }} />
+            <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>No documents yet. Click <b>Add Source</b> to upload a PDF.</p>
+          </div>
+        ) : (
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {pdfDocs.map((doc, index) => (
+              <DocCard
+                key={doc.id}
+                doc={doc}
+                index={index}
+                isSelected={selectedDocs.has(doc.id)}
+                onToggleSelect={toggleSelect}
+                onDelete={handleDelete}
+                onNavigate={(id) => navigate(`/chat/${id}`)}
+                onCall={(id) => navigate(`/call/${id}`)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ─── Multi-select Bar ────────────────────────── */}
       {selectedCount >= 2 && (
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 px-4">
           <div className="pointer-events-auto mx-auto flex max-w-xl items-center justify-between gap-4 rounded-[28px] border border-slate-200/80 bg-[rgba(15,23,42,0.92)] px-5 py-4 text-white shadow-[0_28px_60px_rgba(15,23,42,0.28)] backdrop-blur-xl">
@@ -351,18 +468,239 @@ export default function Dashboard() {
                 <Files className="h-5 w-5 text-teal-300" />
               </div>
               <div>
-                <p className="text-sm font-semibold">{selectedCount} documents selected</p>
-                <p className="text-sm text-slate-300">Launch one conversation across the selected set.</p>
+                <p className="text-sm font-semibold">{selectedCount} selected</p>
+                <p className="text-sm text-slate-300">Compare across sources.</p>
               </div>
             </div>
-
             <button type="button" onClick={handleMultiChat} className="btn-primary shrink-0">
-              <Files className="h-4 w-4" />
-              Compare now
+              <Files className="h-4 w-4" /> Compare now
             </button>
           </div>
         </div>
       )}
+
+      {/* ─── Pages Modal ─────────────────────────────── */}
+      {pagesModalDoc && (
+        <WebsitePagesModal
+          docId={pagesModalDoc.id}
+          docName={pagesModalDoc.original_filename}
+          onClose={() => setPagesModalDoc(null)}
+          onIndexed={fetchDocs}
+        />
+      )}
+
+      {showHelp && <ShortcutsModal onClose={() => setShowHelp(false)} />}
     </div>
+  )
+}
+
+
+/* ─── PDF Document Card ────────────────────────────────── */
+function DocCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavigate, onCall }) {
+  const status = statusConfig[doc.status] || statusConfig.processing
+  const StatusIcon = status.icon
+  const isReady = doc.status === 'ready'
+
+  return (
+    <article
+      onClick={() => isReady && onNavigate(doc.id)}
+      className={`premium-card animate-rise group overflow-hidden transition-all ${
+        isReady ? 'cursor-pointer hover:-translate-y-1 hover:shadow-[var(--shadow-strong)]' : 'cursor-default'
+      } ${isSelected ? 'border-teal-300/90 shadow-[0_24px_60px_rgba(15,118,110,0.14)]' : ''}`}
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      {/* Top color accent bar */}
+      <div className="h-1 w-full" style={{ background: isReady ? 'linear-gradient(90deg, var(--teal), var(--teal-strong))' : doc.status === 'failed' ? 'var(--danger)' : 'var(--amber)' }} />
+
+      <div className="p-5">
+        {/* Header row */}
+        <div className="flex items-start gap-3">
+          {isReady && (
+            <button type="button" onClick={(e) => onToggleSelect(doc.id, e)}
+              className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl border transition ${
+                isSelected ? 'border-teal-500 bg-teal-600 text-white' : 'border-[var(--border)] text-transparent group-hover:text-slate-300'
+              }`}>
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold" style={{ color: 'var(--text)' }}>{doc.original_filename}</p>
+            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+              <span className={status.chipClass} style={{ fontSize: '10px' }}><StatusIcon className={`h-3 w-3 ${status.accent}`} />{status.label}</span>
+              {doc.page_count > 0 && (
+                <span className="text-[10px] font-medium" style={{ color: 'var(--muted-soft)' }}>{doc.page_count} pages</span>
+              )}
+              {doc.auto_summary && (
+                <span className="text-[10px] font-medium" style={{ color: 'var(--teal)' }}>AI summary</span>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={(e) => onDelete(doc.id, e)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Summary preview */}
+        {doc.auto_summary && (
+          <p className="mt-3 line-clamp-2 text-xs leading-5" style={{ color: 'var(--muted)' }}>{doc.auto_summary}</p>
+        )}
+
+        {/* Date */}
+        <p className="mt-3 text-[10px]" style={{ color: 'var(--muted-soft)' }}>{dateFormatter.format(new Date(doc.created_at))}</p>
+
+        {/* Actions */}
+        {isReady && (
+          <div className="mt-3 flex items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onNavigate(doc.id) }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-[var(--teal-soft)]"
+              style={{ borderColor: 'var(--border)', color: 'var(--teal)' }}>
+              <MessageSquareText className="h-3 w-3" /> Chat
+            </button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onCall(doc.id) }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-emerald-50"
+              style={{ borderColor: 'var(--border)', color: '#10b981' }}>
+              <Phone className="h-3 w-3" /> Call
+            </button>
+          </div>
+        )}
+
+        {doc.error_message && (
+          <div className="mt-3 rounded-xl border border-red-100 bg-red-50/80 p-3">
+            <p className="text-[11px] leading-5 text-red-600">{doc.error_message}</p>
+          </div>
+        )}
+      </div>
+    </article>
+  )
+}
+
+
+/* ─── Website Card ─────────────────────────────────────── */
+function WebsiteCard({ doc, index, isSelected, onToggleSelect, onDelete, onNavigate, onCall, onManagePages, onScheduleChange }) {
+  const status = statusConfig[doc.status] || statusConfig.processing
+  const StatusIcon = status.icon
+  const isReady = doc.status === 'ready'
+  const isCrawled = doc.status === 'crawled'
+
+  const statusLabel = doc.status === 'processing' ? 'Crawling...'
+    : isCrawled ? `${doc.page_count || 0} pages crawled`
+    : status.label
+
+  const barColor = isReady ? 'linear-gradient(90deg, #f59e0b, #d97706)' : isCrawled ? 'linear-gradient(90deg, var(--teal), var(--teal-strong))' : doc.status === 'failed' ? 'var(--danger)' : 'var(--amber)'
+
+  return (
+    <article
+      onClick={() => isReady && onNavigate(doc.id)}
+      className={`premium-card animate-rise group overflow-hidden transition-all ${
+        isReady ? 'cursor-pointer hover:-translate-y-1 hover:shadow-[var(--shadow-strong)]' : 'cursor-default'
+      } ${isSelected ? 'border-teal-300/90 shadow-[0_24px_60px_rgba(15,118,110,0.14)]' : ''}`}
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      {/* Top accent */}
+      <div className="h-1 w-full" style={{ background: barColor }} />
+
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          {isReady && (
+            <button type="button" onClick={(e) => onToggleSelect(doc.id, e)}
+              className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl border transition ${
+                isSelected ? 'border-teal-500 bg-teal-600 text-white' : 'border-[var(--border)] text-transparent group-hover:text-slate-300'
+              }`}>
+              <Check className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 shrink-0" style={{ color: '#f59e0b' }} />
+              <p className="truncate text-sm font-bold" style={{ color: 'var(--text)' }}>{doc.original_filename}</p>
+            </div>
+            {doc.source_url && (
+              <p className="mt-0.5 truncate text-[10px]" style={{ color: 'var(--muted-soft)' }}>{doc.source_url}</p>
+            )}
+            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+              <span className={isCrawled ? 'status-pill status-processing' : status.chipClass} style={{ fontSize: '10px' }}>
+                <StatusIcon className={`h-3 w-3 ${isCrawled ? 'text-amber-700' : status.accent}`} />
+                {statusLabel}
+              </span>
+              {doc.recrawl_schedule && (
+                <span className="text-[10px] font-medium flex items-center gap-0.5" style={{ color: 'var(--muted-soft)' }}>
+                  <RefreshCw className="h-2.5 w-2.5" /> {doc.recrawl_schedule}
+                </span>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={(e) => onDelete(doc.id, e)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Summary or URL info */}
+        {doc.auto_summary ? (
+          <p className="mt-3 line-clamp-2 text-xs leading-5" style={{ color: 'var(--muted)' }}>{doc.auto_summary}</p>
+        ) : doc.page_count > 0 ? (
+          <p className="mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+            {doc.page_count} pages indexed{doc.crawl_stats?.total_discovered ? ` · ${doc.crawl_stats.total_discovered} discovered` : ''}
+          </p>
+        ) : null}
+
+        {/* Date + schedule */}
+        <div className="mt-3 flex items-center justify-between">
+          <p className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>{dateFormatter.format(new Date(doc.created_at))}</p>
+          {isReady && (
+            <select
+              value={doc.recrawl_schedule || ''}
+              onChange={(e) => { e.stopPropagation(); onScheduleChange(doc.id, e.target.value || null) }}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-lg border px-2 py-0.5 text-[10px] font-medium outline-none"
+              style={{ borderColor: 'var(--border)', color: 'var(--muted)', background: 'var(--surface)' }}
+            >
+              <option value="">No re-crawl</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-3 flex items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+          {(isCrawled || isReady) && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); onManagePages(doc) }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-slate-50"
+              style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}>
+              <Settings2 className="h-3 w-3" /> {isCrawled ? 'Review & Index' : 'Pages'}
+            </button>
+          )}
+          {isReady && (
+            <>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onNavigate(doc.id) }}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-[var(--teal-soft)]"
+                style={{ borderColor: 'var(--border)', color: 'var(--teal)' }}>
+                <MessageSquareText className="h-3 w-3" /> Chat
+              </button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onCall(doc.id) }}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-emerald-50"
+                style={{ borderColor: 'var(--border)', color: '#10b981' }}>
+                <Phone className="h-3 w-3" /> Call
+              </button>
+            </>
+          )}
+          {doc.status === 'processing' && (
+            <div className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium" style={{ color: 'var(--muted-soft)' }}>
+              <Loader2 className="h-3 w-3 animate-spin" /> Crawling...
+            </div>
+          )}
+        </div>
+
+        {doc.error_message && (
+          <div className="mt-3 rounded-xl border border-red-100 bg-red-50/80 p-3">
+            <p className="text-[11px] leading-5 text-red-600">{doc.error_message}</p>
+          </div>
+        )}
+      </div>
+    </article>
   )
 }

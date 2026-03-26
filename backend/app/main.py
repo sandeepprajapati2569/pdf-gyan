@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 from app.database import connect_db, close_db
 from app.services.private_db_service import close_all_private_clients
-from app.routers import auth, documents, chat, settings as settings_router, api_keys, public_api
+from app.routers import auth, documents, chat, settings as settings_router, api_keys, public_api, voice_call, website, embed, shared, bookmarks, analytics, teams, workspace
 
 
 @asynccontextmanager
@@ -37,6 +37,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Handle Pydantic validation errors as user-friendly strings
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    messages = []
+    for err in errors:
+        field = " > ".join(str(loc) for loc in err.get("loc", []) if loc != "body")
+        msg = err.get("msg", "Validation error")
+        messages.append(f"{field}: {msg}" if field else msg)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "; ".join(messages)},
+    )
+
+
 # Global exception handler to surface errors
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -55,6 +72,14 @@ app.include_router(chat.router)
 app.include_router(settings_router.router)
 app.include_router(api_keys.router)
 app.include_router(public_api.router)
+app.include_router(voice_call.router)
+app.include_router(website.router)
+app.include_router(embed.router)
+app.include_router(shared.router)
+app.include_router(bookmarks.router)
+app.include_router(analytics.router)
+app.include_router(workspace.router)
+app.include_router(teams.router)
 
 
 @app.get("/api/health")
