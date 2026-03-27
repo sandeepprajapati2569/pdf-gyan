@@ -39,3 +39,6 @@ libs/
 
 # Claude
 .claude/
+
+# Website build
+website/.next/

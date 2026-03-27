@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import Navbar from './Navbar'
 import AppSidebar from './AppSidebar'
 import TopBar from './TopBar'
 import { useAuth } from '../../context/useAuth'
 import { useTheme } from '../../context/ThemeContext'
 
-const PUBLIC_PREFIXES = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/embed', '/shared']
+const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password']
+const EMBED_PATHS = ['/embed', '/shared']  // /shared-file/* and /shared-files handled here
 
-function isPublicPath(pathname) {
-  if (pathname === '/') return true
-  return PUBLIC_PREFIXES.some(p => p !== '/' && pathname.startsWith(p))
+function isAuthPath(pathname) {
+  return AUTH_PATHS.some(p => pathname.startsWith(p))
+}
+
+function isEmbedPath(pathname) {
+  return EMBED_PATHS.some(p => pathname.startsWith(p))
 }
 
 function BackgroundDecor({ theme }) {
@@ -54,16 +57,17 @@ export default function Layout({ children }) {
   const { pathname } = useLocation()
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
-  const isPublic = isPublicPath(pathname)
-  const showSidebar = !!user && !isPublic
+  // Embed/shared routes — no chrome at all
+  if (isEmbedPath(pathname)) {
+    return <>{children}</>
+  }
 
-  // Public layout (landing, login, embed, etc.)
-  if (!showSidebar) {
+  // Auth pages (login, register, etc.) — centered layout, no sidebar
+  if (isAuthPath(pathname) && !user) {
     return (
-      <div className="relative flex min-h-screen flex-col overflow-x-hidden">
+      <div className="relative min-h-screen overflow-x-hidden">
         <BackgroundDecor theme={theme} />
-        <Navbar />
-        <main className="app-main relative z-10 flex-1">{children}</main>
+        <main className="relative z-10 flex min-h-screen items-center justify-center">{children}</main>
       </div>
     )
   }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
-  ArrowLeft, ArrowUpDown, ChevronRight, FileSpreadsheet, FileText, Folder, FolderOpen,
-  FolderPlus, Globe, Loader2, Lock, MessageSquareText, MoreHorizontal, Move, Pencil,
+  ArrowLeft, ArrowUpDown, ChevronRight, Download, Eye, FileSpreadsheet, FileText, Folder, FolderOpen,
+  FolderPlus, Globe, Loader2, Lock, Mail, MessageSquareText, MoreHorizontal, Move, Pencil,
   Plus, Presentation, Search, Send, Shield, Sparkles, Trash2, Upload, Users, X,
 } from 'lucide-react'
 import client from '../api/client'
@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
 import AccessModal from '../components/workspace/AccessModal'
 import FilePreviewModal from '../components/workspace/FilePreviewModal'
+import ShareModal from '../components/workspace/ShareModal'
 
 const FILE_ICONS = { pdf: FileText, xlsx: FileSpreadsheet, pptx: Presentation, docx: FileText, txt: FileText }
 
@@ -51,7 +52,13 @@ export default function WorkspacePage() {
   const [renameName, setRenameName] = useState('')
   const [moveTarget, setMoveTarget] = useState(null) // {type:'file'|'folder', id}
   const [accessTarget, setAccessTarget] = useState(null) // {type:'file'|'folder', id, name, access}
+  const [shareTarget, setShareTarget] = useState(null) // {id, name, fileType, pageCount}
   const [previewFile, setPreviewFile] = useState(null) // {id, name, file_type, page_count}
+  const [workspaceTab, setWorkspaceTab] = useState('files') // 'files' | 'shared' | 'received'
+  const [sharedLinks, setSharedLinks] = useState([])
+  const [sharedLoading, setSharedLoading] = useState(false)
+  const [receivedFiles, setReceivedFiles] = useState([])
+  const [receivedLoading, setReceivedLoading] = useState(false)
   const [allFolders, setAllFolders] = useState([])
   const [moveDestination, setMoveDestination] = useState(null)
 
@@ -79,6 +86,52 @@ export default function WorkspacePage() {
 
   useEffect(() => { loadContents() }, [loadContents])
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const loadSharedLinks = useCallback(async () => {
+    setSharedLoading(true)
+    try {
+      const res = await client.get('/api/sharespace/my-shares')
+      setSharedLinks(res.data || [])
+    } catch { setSharedLinks([]) }
+    finally { setSharedLoading(false) }
+  }, [])
+
+  useEffect(() => { if (workspaceTab === 'shared') loadSharedLinks() }, [workspaceTab, loadSharedLinks])
+
+  const loadReceivedFiles = useCallback(async () => {
+    setReceivedLoading(true)
+    try {
+      const res = await client.get('/api/sharespace/received')
+      setReceivedFiles(res.data || [])
+    } catch { setReceivedFiles([]) }
+    finally { setReceivedLoading(false) }
+  }, [])
+
+  useEffect(() => { if (workspaceTab === 'received') loadReceivedFiles() }, [workspaceTab, loadReceivedFiles])
+
+  const claimFile = async (token) => {
+    try {
+      const res = await client.post(`/api/sharespace/${token}/claim`)
+      toast.success(`"${res.data.filename}" added to your files!`)
+      loadReceivedFiles()
+      loadContents()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to claim file')
+    }
+  }
+
+  const revokeShare = async (token) => {
+    try {
+      await client.delete(`/api/sharespace/${token}`)
+      toast.success('Share revoked')
+      loadSharedLinks()
+    } catch { toast.error('Failed to revoke') }
+  }
+
+  const copyShareLink = (token) => {
+    navigator.clipboard.writeText(`${window.location.origin}/shared-file/${token}`)
+    toast.success('Link copied!')
+  }
 
   // ── Navigate ──
   const navigateTo = (folderId) => {
@@ -293,47 +346,63 @@ export default function WorkspacePage() {
         <div className={`premium-card flex flex-col h-full overflow-hidden ${chatOpen ? 'lg:w-[55%]' : 'w-full'} transition-all`}>
 
           {/* Header */}
-          <div className="border-b px-5 py-4 flex flex-col gap-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="border-b px-5 py-3" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between gap-3">
-              {/* Breadcrumb */}
-              <nav className="flex items-center gap-1 text-sm min-w-0 flex-1 overflow-hidden">
-                <button onClick={() => navigateTo(null)} className="shrink-0 font-semibold transition hover:text-[var(--teal)]" style={{ color: currentFolderId ? 'var(--muted-soft)' : 'var(--text)' }}>
-                  Workspace
-                </button>
-                {breadcrumb.map(b => (
+              {/* Left: Tabs + Breadcrumb */}
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* Tabs */}
+                {[
+                  { key: 'files', label: 'Files' },
+                  { key: 'shared', label: 'Shared', count: sharedLinks.filter(s => s.is_active).length },
+                  { key: 'received', label: 'Received', count: receivedFiles.filter(f => f.is_active && !f.is_expired).length },
+                ].map(tab => (
+                  <button key={tab.key} type="button"
+                    onClick={() => setWorkspaceTab(tab.key)}
+                    className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-bold transition"
+                    style={{
+                      background: workspaceTab === tab.key ? 'var(--teal-soft)' : 'transparent',
+                      color: workspaceTab === tab.key ? 'var(--teal)' : 'var(--muted-soft)',
+                    }}>
+                    {tab.label}
+                    {tab.count > 0 && <span className="ml-1 rounded-md px-1 py-0.5 text-[9px]" style={{ background: 'var(--teal)', color: 'white' }}>{tab.count}</span>}
+                  </button>
+                ))}
+
+                {/* Breadcrumb (files tab only, inside a folder) */}
+                {workspaceTab === 'files' && currentFolderId && (
+                  <nav className="flex items-center gap-1 text-xs min-w-0 overflow-hidden ml-1">
+                    <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'var(--muted-soft)' }} />
+                    <button onClick={() => navigateTo(null)} className="shrink-0 font-medium transition hover:text-[var(--teal)]" style={{ color: 'var(--muted-soft)' }}>
+                      Root
+                    </button>
+                    {breadcrumb.map(b => (
                   <span key={b.id} className="flex items-center gap-1 min-w-0">
                     <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'var(--muted-soft)' }} />
                     <button onClick={() => navigateTo(b.id)} className="truncate font-medium transition hover:text-[var(--teal)]" style={{ color: 'var(--text)' }}>
                       {b.name}
                     </button>
-                  </span>
-                ))}
-              </nav>
+                    </span>
+                  ))}
+                  </nav>
+                )}
+              </div>
 
-              {/* Actions */}
+              {/* Right: Actions (files tab only) */}
+              {workspaceTab === 'files' && (
               <div className="flex items-center gap-2 shrink-0">
-                {/* Search */}
                 <div className="relative hidden sm:block">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3" style={{ color: 'var(--muted-soft)' }} />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search..."
-                    className="rounded-lg border bg-transparent pl-7 pr-2 py-1.5 text-[11px] outline-none w-36 transition focus:w-48 focus:border-[var(--teal)]"
-                    style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-                  />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search..." className="rounded-lg border bg-transparent pl-7 pr-2 py-1.5 text-[11px] outline-none w-36 transition focus:w-48 focus:border-[var(--teal)]"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text)' }} />
                   {searchQuery && (
-                    <button onClick={() => setSearchQuery('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-soft)' }}>
+                    <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted-soft)' }}>
                       <X className="h-3 w-3" />
                     </button>
                   )}
                 </div>
-                {/* Sort button */}
                 <div className="relative">
-                  <button onClick={() => setSortMenuOpen(!sortMenuOpen)}
-                    className="btn-ghost text-xs !gap-1.5" title="Sort">
+                  <button onClick={() => setSortMenuOpen(!sortMenuOpen)} className="btn-ghost text-xs !gap-1.5" title="Sort">
                     <ArrowUpDown className="h-3 w-3" /> Sort
                   </button>
                   {sortMenuOpen && (
@@ -367,16 +436,240 @@ export default function WorkspacePage() {
                   <MessageSquareText className="h-3.5 w-3.5" /> Chat
                 </button>
               </div>
+              )}
             </div>
 
             {uploading && (
-              <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--teal)' }}>
+              <div className="flex items-center gap-2 text-xs mt-2" style={{ color: 'var(--teal)' }}>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...
               </div>
             )}
           </div>
 
-          {/* Content — right-click enabled */}
+          {/* ════ SHARED TAB CONTENT ════ */}
+          {workspaceTab === 'shared' && (
+            <div className="flex-1 overflow-y-auto p-5">
+              {sharedLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--teal)' }} />
+                </div>
+              ) : sharedLinks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <Globe className="h-10 w-10" style={{ color: 'var(--muted-soft)' }} />
+                  <p className="mt-4 text-sm font-bold" style={{ color: 'var(--text)' }}>No external shares yet</p>
+                  <p className="mt-1 text-xs max-w-xs leading-5" style={{ color: 'var(--muted-soft)' }}>
+                    Share files with people outside your workspace. Hover a file and click the share icon, or right-click and select "External Share".
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {sharedLinks.map(share => {
+                    const color = FILE_COLORS[share.file_type] || '#8b5cf6'
+                    const isExpired = share.expires_at && new Date(share.expires_at) < new Date()
+                    const isActive = share.is_active && !isExpired
+                    return (
+                      <div key={share.share_token} className="rounded-xl border overflow-hidden"
+                        style={{ borderColor: 'var(--border)', opacity: isActive ? 1 : 0.5 }}>
+                        {/* Header row */}
+                        <div className="flex items-center gap-3 p-3" style={{ background: 'var(--surface)' }}>
+                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: `${color}12` }}>
+                            <FileText className="h-4 w-4" style={{ color }} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{share.original_filename}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                                style={{ background: share.permission === 'read' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)', color: share.permission === 'read' ? '#f59e0b' : '#10b981' }}>
+                                {share.permission === 'read' ? 'View only' : 'Full access'}
+                              </span>
+                              <span className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>{share.view_count} view{share.view_count !== 1 ? 's' : ''}</span>
+                              {share.has_password && <Lock className="h-2.5 w-2.5" style={{ color: 'var(--muted-soft)' }} />}
+                              {share.redactions_count > 0 && <span className="text-[10px]" style={{ color: '#f59e0b' }}>{share.redactions_count} redacted</span>}
+                              {isExpired && <span className="text-[9px] font-bold text-red-500">EXPIRED</span>}
+                              {!share.is_active && <span className="text-[9px] font-bold text-red-500">REVOKED</span>}
+                              {share.expires_at && isActive && (
+                                <span className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>
+                                  Expires {new Date(share.expires_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button onClick={() => copyShareLink(share.share_token)} title="Copy link"
+                              className="grid h-8 w-8 place-items-center rounded-lg border transition hover:bg-white/60"
+                              style={{ borderColor: 'var(--border)', color: 'var(--muted-soft)' }}>
+                              <Globe className="h-3.5 w-3.5" />
+                            </button>
+                            {isActive && (
+                              <button onClick={() => revokeShare(share.share_token)} title="Revoke access"
+                                className="grid h-8 w-8 place-items-center rounded-lg border transition hover:bg-red-50"
+                                style={{ borderColor: 'var(--border)', color: 'var(--muted-soft)' }}>
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Recipients + Management */}
+                        <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border)', background: 'var(--surface-soft)' }}>
+                          {share.recipients?.length > 0 && (
+                            <>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.12em] mb-1.5" style={{ color: 'var(--muted-soft)' }}>
+                                Shared with ({share.recipients.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {share.recipients.map(email => (
+                                  <span key={email} className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-medium"
+                                    style={{ borderColor: 'var(--border)', color: 'var(--text)', background: 'var(--surface)' }}>
+                                    <Mail className="h-2.5 w-2.5" style={{ color: 'var(--teal)' }} />
+                                    {email}
+                                    {isActive && (
+                                      <button onClick={async () => {
+                                        const newRecipients = share.recipients.filter(r => r !== email)
+                                        try {
+                                          await client.patch(`/api/sharespace/${share.share_token}`, { recipients: newRecipients })
+                                          toast.success(`Removed ${email}`)
+                                          loadSharedLinks()
+                                        } catch { toast.error('Failed to remove') }
+                                      }} className="hover:text-red-500 transition" title="Remove">
+                                        <X className="h-2 w-2" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Add user + Extend expiry actions */}
+                          {isActive && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Add user inline form */}
+                              <form onSubmit={async (e) => {
+                                e.preventDefault()
+                                const input = e.target.elements.newEmail
+                                const newEmail = input.value.trim()
+                                if (!newEmail || !newEmail.includes('@')) return
+                                try {
+                                  const updated = [...(share.recipients || []), newEmail]
+                                  await client.patch(`/api/sharespace/${share.share_token}`, { recipients: updated })
+                                  toast.success(`Added ${newEmail}`)
+                                  input.value = ''
+                                  loadSharedLinks()
+                                } catch { toast.error('Failed to add user') }
+                              }} className="flex items-center gap-1.5">
+                                <input name="newEmail" type="email" placeholder="Add email..."
+                                  className="rounded-lg border px-2 py-1 text-[10px] w-36 outline-none focus:border-[var(--teal)]"
+                                  style={{ borderColor: 'var(--border)', background: 'var(--surface)', color: 'var(--text)' }} />
+                                <button type="submit" className="rounded-lg px-2 py-1 text-[10px] font-bold text-white"
+                                  style={{ background: 'var(--teal)' }}>Add</button>
+                              </form>
+
+                              {/* Extend expiry */}
+                              <div className="flex items-center gap-1 ml-auto">
+                                {[7, 30, 90].map(days => (
+                                  <button key={days} type="button" onClick={async () => {
+                                    try {
+                                      await client.patch(`/api/sharespace/${share.share_token}`, { extend_days: days })
+                                      toast.success(`Extended by ${days} days`)
+                                      loadSharedLinks()
+                                    } catch { toast.error('Failed to extend') }
+                                  }}
+                                    className="rounded-lg border px-2 py-1 text-[9px] font-semibold transition hover:bg-white/60"
+                                    style={{ borderColor: 'var(--border)', color: 'var(--muted)' }} title={`Extend by ${days} days`}>
+                                    +{days}d
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ════ RECEIVED TAB CONTENT ════ */}
+          {workspaceTab === 'received' && (
+            <div className="flex-1 overflow-y-auto p-5">
+              {receivedLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--teal)' }} />
+                </div>
+              ) : receivedFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <Download className="h-10 w-10" style={{ color: 'var(--muted-soft)' }} />
+                  <p className="mt-4 text-sm font-bold" style={{ color: 'var(--text)' }}>No files received yet</p>
+                  <p className="mt-1 text-xs max-w-xs leading-5" style={{ color: 'var(--muted-soft)' }}>
+                    When someone shares a document with your email, it will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {receivedFiles.map(share => {
+                    const color = FILE_COLORS[share.file_type] || '#8b5cf6'
+                    const Icon = FILE_ICONS[share.file_type] || FileText
+                    const isExpired = share.is_expired
+                    const isActive = share.is_active && !isExpired
+                    const canClaim = isActive && share.permission === 'write'
+
+                    return (
+                      <div key={share.share_token} className="rounded-xl border overflow-hidden"
+                        style={{ borderColor: 'var(--border)', opacity: isActive ? 1 : 0.5 }}>
+                        <div className="flex items-center gap-3 p-4" style={{ background: 'var(--surface)' }}>
+                          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ background: `${color}12` }}>
+                            <Icon className="h-5 w-5" style={{ color }} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold" style={{ color: 'var(--text)' }}>{share.filename}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                                style={{ background: share.permission === 'write' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: share.permission === 'write' ? '#10b981' : '#f59e0b' }}>
+                                {share.permission === 'write' ? 'Full access' : 'View only'}
+                              </span>
+                              {share.shared_by && (
+                                <span className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>from {share.shared_by}</span>
+                              )}
+                              {isExpired && <span className="text-[9px] font-bold text-red-500">EXPIRED</span>}
+                              {share.expires_at && isActive && (
+                                <span className="text-[10px]" style={{ color: 'var(--muted-soft)' }}>
+                                  Expires {new Date(share.expires_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        {isActive && (
+                          <div className="border-t px-4 py-2.5 flex items-center gap-2" style={{ borderColor: 'var(--border)', background: 'var(--surface-soft)' }}>
+                            <a href={`/shared-file/${share.share_token}`} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-white/60"
+                              style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
+                              <Eye className="h-3 w-3" /> View
+                            </a>
+                            {canClaim && (
+                              <button type="button" onClick={() => claimFile(share.share_token)}
+                                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold text-white transition"
+                                style={{ background: 'var(--teal)' }}>
+                                <Download className="h-3 w-3" /> Move to My Files
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Content — right-click enabled (files tab) */}
+          {workspaceTab === 'files' && (
           <div className="flex-1 overflow-y-auto p-4" onContextMenu={handleContextMenu} onClick={() => setContextMenu(null)}>
             {loading ? (
               <div className="flex items-center justify-center py-20">
@@ -469,7 +762,7 @@ export default function WorkspacePage() {
                         onDragStart={() => handleDragStart('file', item.id)}
                         onDragEnd={handleDragEnd}
                         onClick={() => setPreviewFile({ id: item.id, name: item.original_filename, file_type: item.file_type, page_count: item.page_count })}
-                        onContextMenu={(e) => handleContextMenu(e, { _kind: 'file', id: item.id, name: item.original_filename, access_level: item.access_level, shared_with: item.shared_with })}
+                        onContextMenu={(e) => handleContextMenu(e, { _kind: 'file', id: item.id, name: item.original_filename, file_type: item.file_type, page_count: item.page_count, access_level: item.access_level, shared_with: item.shared_with })}
                         className="group premium-card min-w-0 cursor-pointer overflow-hidden transition-all hover:-translate-y-1 hover:shadow-lg">
                         <div className="h-1.5 w-full rounded-t-[inherit]" style={{ background: `linear-gradient(90deg, ${color}, ${color}66)` }} />
                         <div className="p-4">
@@ -481,10 +774,13 @@ export default function WorkspacePage() {
                               <button onClick={(e) => { e.stopPropagation(); startChat(item.id) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-teal-50 transition" title="Chat with file">
                                 <MessageSquareText className="h-3 w-3" style={{ color: 'var(--teal)' }} />
                               </button>
-                              <button onClick={(e) => { e.stopPropagation(); openMoveModal('file', item.id) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-slate-100 transition">
+                              <button onClick={(e) => { e.stopPropagation(); setShareTarget({ id: item.id, name: item.original_filename, fileType: item.file_type, pageCount: item.page_count }) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-indigo-50 transition" title="Share">
+                                <Globe className="h-3 w-3" style={{ color: '#6366f1' }} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); openMoveModal('file', item.id) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-slate-100 transition" title="Move">
                                 <Move className="h-3 w-3" style={{ color: 'var(--muted-soft)' }} />
                               </button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDelete('file', item.id, item.original_filename) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-red-50 transition">
+                              <button onClick={(e) => { e.stopPropagation(); handleDelete('file', item.id, item.original_filename) }} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-red-50 transition" title="Delete">
                                 <Trash2 className="h-3 w-3 text-red-400" />
                               </button>
                             </div>
@@ -517,6 +813,7 @@ export default function WorkspacePage() {
             )}
 
           </div>
+          )}
         </div>
 
         {/* ════ CHAT PANEL ════ */}
@@ -675,6 +972,18 @@ export default function WorkspacePage() {
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-white/60" style={{ color: 'var(--text)' }}>
                   <Upload className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} /> Upload File
                 </button>
+
+                {/* Share file (only for files) */}
+                {contextMenu.item && contextMenu.item._kind === 'file' && (
+                  <button onClick={() => {
+                    const item = contextMenu.item
+                    setShareTarget({ id: item.id, name: item.name || item.original_filename, fileType: item.file_type, pageCount: item.page_count })
+                    setContextMenu(null)
+                  }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition hover:bg-white/60" style={{ color: 'var(--text)' }}>
+                    <Globe className="h-3.5 w-3.5" style={{ color: '#6366f1' }} /> External Share
+                  </button>
+                )}
                 <div className="my-1 h-px" style={{ background: 'var(--border)' }} />
               </>
             )}
@@ -760,6 +1069,18 @@ export default function WorkspacePage() {
           source="workspace"
           onClose={() => setPreviewFile(null)}
           onChat={() => { setPreviewFile(null); startChat(previewFile.id) }}
+        />
+      )}
+
+      {/* ════ SHARE MODAL ════ */}
+      {shareTarget && (
+        <ShareModal
+          fileId={shareTarget.id}
+          fileName={shareTarget.name}
+          fileType={shareTarget.fileType}
+          pageCount={shareTarget.pageCount}
+          onClose={() => setShareTarget(null)}
+          onShared={() => {}}
         />
       )}
 

@@ -327,3 +327,136 @@ This code expires in {settings.SIGNUP_OTP_EXPIRE_MINUTES} minutes. If you did no
     except Exception as e:
         logger.error(f"Failed to send signup OTP email to {to_email}: {e}")
         raise
+
+
+async def send_share_otp_email(to_email: str, otp: str, filename: str):
+    """Send OTP for share access verification with branded template."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"You've been shared a document — {filename}"
+    msg["From"] = settings.SMTP_FROM_EMAIL
+    msg["To"] = to_email
+
+    app_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+    portal_url = f"{app_url}/shared-files"
+
+    text_content = f"""Someone shared "{filename}" with you on PDF Gyan.
+
+Your verification code: {otp}
+
+This code expires in 10 minutes.
+
+View all your shared documents: {portal_url}
+
+— PDF Gyan · Document intelligence that feels calm and capable"""
+
+    html_content = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:linear-gradient(135deg,#f0fdf4 0%,#fefce8 50%,#f5f5f4 100%);">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:40px auto;">
+  <tr><td style="padding:24px 28px 16px;text-align:left;">
+    <table cellpadding="0" cellspacing="0"><tr>
+      <td style="width:36px;height:36px;background:linear-gradient(135deg,#0f766e,#0d9488);border-radius:12px;text-align:center;vertical-align:middle;">
+        <span style="color:#fff;font-size:16px;font-weight:800;">G</span>
+      </td>
+      <td style="padding-left:10px;">
+        <p style="margin:0;font-size:16px;font-weight:800;color:#0f172a;">PDF Gyan</p>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding:0 16px 24px;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:20px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.06);">
+      <tr><td style="padding:32px 28px;">
+        <p style="margin:0 0 4px;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#0f766e;">Shared with you</p>
+        <h1 style="margin:0 0 6px;font-size:22px;font-weight:800;color:#0f172a;">A document is waiting</h1>
+        <p style="margin:0 0 20px;font-size:14px;color:#64748b;line-height:1.6;">
+          Someone shared <strong style="color:#0f172a;">{filename}</strong> with you. Enter the code below to access it.
+        </p>
+        <div style="background:linear-gradient(135deg,#f0fdfa,#f0fdf4);border:2px solid #ccfbf1;border-radius:16px;padding:20px;text-align:center;margin-bottom:20px;">
+          <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#0f766e;">Verification Code</p>
+          <p style="margin:0;font-size:36px;font-weight:800;letter-spacing:0.35em;color:#0f172a;font-family:'Courier New',monospace;">{otp}</p>
+        </div>
+        <p style="margin:0 0 24px;font-size:12px;color:#94a3b8;text-align:center;">Code expires in 10 minutes</p>
+        <div style="height:1px;background:#e2e8f0;margin:0 0 20px;"></div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="text-align:center;">
+            <a href="{portal_url}" style="display:inline-block;background:linear-gradient(135deg,#0f766e,#0d9488);color:#ffffff;padding:12px 28px;border-radius:14px;font-size:13px;font-weight:700;text-decoration:none;">
+              View all shared documents
+            </a>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:0 28px 32px;text-align:center;">
+    <p style="margin:0;font-size:11px;color:#94a3b8;">PDF Gyan — Document intelligence that feels calm and capable</p>
+  </td></tr>
+</table>
+</body></html>"""
+
+    msg.attach(MIMEText(text_content, "plain"))
+    msg.attach(MIMEText(html_content, "html"))
+
+    def _send():
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, _send)
+        logger.info(f"Share OTP email sent to {to_email}")
+    except Exception as e:
+        logger.error(f"Failed to send share OTP to {to_email}: {e}")
+        raise
+
+
+async def send_share_notification_email(to_email: str, filename: str, share_token: str, sender_name: str = "Someone"):
+    """Send email notification when a file is shared externally."""
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
+    share_url = f"{frontend_url}/shared-file/{share_token}"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"{sender_name} shared a document with you — PDF Gyan"
+    msg["From"] = settings.SMTP_FROM_EMAIL
+    msg["To"] = to_email
+
+    text_content = f"""Hi,
+
+{sender_name} has shared a document with you on PDF Gyan.
+
+Document: {filename}
+View it here: {share_url}
+
+This link will expire in 30 days.
+
+— PDF Gyan"""
+
+    html_content = f"""<!DOCTYPE html>
+    <html><body style="margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif;background:#f6f4ed;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:40px auto;background:#fff;border-radius:20px;border:1px solid #e2e8f0;overflow:hidden;">
+      <tr><td style="padding:32px 28px;">
+        <p style="margin:0 0 6px;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#94a3b8;">Document shared with you</p>
+        <h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">{sender_name} shared a file</h1>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:20px;">
+          <p style="margin:0;font-size:15px;font-weight:600;color:#0f172a;">{filename}</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#64748b;">Click below to view this document</p>
+        </div>
+        <a href="{share_url}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#0f766e,#0f5d75);color:#fff;text-decoration:none;border-radius:12px;font-size:14px;font-weight:600;">View Document</a>
+        <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;">This link expires in 30 days. If you weren't expecting this, you can ignore this email.</p>
+      </td></tr>
+    </table>
+    </body></html>"""
+
+    msg.attach(MIMEText(text_content, "plain"))
+    msg.attach(MIMEText(html_content, "html"))
+
+    def _send():
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, _send)
+        logger.info(f"Share notification email sent to {to_email}")
+    except Exception as e:
+        logger.error(f"Failed to send share notification to {to_email}: {e}")

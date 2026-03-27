@@ -39,6 +39,14 @@ async def connect_db():
         # Webhooks
         await db.webhooks.create_index([("user_id", 1), ("event_type", 1)])
         await db.webhook_logs.create_index([("webhook_id", 1), ("created_at", -1)])
+        # Shared files (Sharespace)
+        await db.shared_files.create_index("share_token", unique=True)
+        await db.shared_files.create_index("expires_at", expireAfterSeconds=0)
+        await db.shared_files.create_index([("owner_id", 1), ("file_id", 1)])
+        await db.shared_files.create_index([("owner_id", 1), ("is_active", 1)])
+        await db.share_verifications.create_index([("share_token", 1), ("email", 1)])
+        await db.share_verifications.create_index("session_token")
+        await db.share_access_log.create_index([("email", 1), ("share_token", 1)])
         # Workspace files + folders
         await db.workspace_files.create_index([("user_id", 1), ("status", 1)])
         await db.workspace_files.create_index([("user_id", 1), ("file_type", 1)])
